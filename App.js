@@ -157,6 +157,139 @@ function formatTarih(tarih) {
   });
 }
 
+// ── 1. KVKK ONAY KUTUSU BİLEŞENİ ────────────────────────
+function KVKKOnayKutusu({ onayVerildi, setOnayVerildi, onGizlilikAc }) {
+  return (
+    <TouchableOpacity
+      style={styles.kvkkRow}
+      onPress={() => setOnayVerildi(!onayVerildi)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.kvkkCheckbox, onayVerildi && styles.kvkkCheckboxAktif]}>
+        {onayVerildi && <Text style={styles.kvkkCheckMark}>✓</Text>}
+      </View>
+      <Text style={styles.kvkkText}>
+        <Text style={styles.kvkkTextNormal}>Kişisel verilerimin işlenmesini, </Text>
+        <Text
+          style={styles.kvkkLink}
+          onPress={(e) => { e.stopPropagation?.(); onGizlilikAc(); }}
+        >
+          Gizlilik Politikası
+        </Text>
+        <Text style={styles.kvkkTextNormal}> kapsamında onaylıyorum.</Text>
+        <Text style={{ color: C.danger }}> *</Text>
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ── 2. GİZLİLİK POLİTİKASI SAYFASI ──────────────────────
+function GizlilikPolitikasi({ onKapat }) {
+  const slideAnim = useRef(new Animated.Value(800)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 12, useNativeDriver: true }).start();
+  }, []);
+
+  return (
+    <View style={styles.modalOverlay}>
+      <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }], maxHeight: '92%', paddingHorizontal: 0 }]}>
+        <View style={[styles.modalBar, { backgroundColor: C.midnight }]} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 16 }}>
+          <Text style={[styles.modalBaslik, { marginBottom: 0 }]}>🔒 Gizlilik Politikası</Text>
+          <TouchableOpacity onPress={onKapat} style={{ padding: 8 }}>
+            <Text style={{ fontSize: 20, color: C.textSoft }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={{ paddingHorizontal: 24 }} showsVerticalScrollIndicator={false}>
+          <Text style={styles.gizlilikTarih}>Son güncelleme: Ocak 2025</Text>
+
+          {[
+            {
+              baslik: '1. Veri Sorumlusu',
+              icerik: 'etkinlink ("Şirket", "biz") olarak, kişisel verilerinizin güvenliği konusunda azami özen göstermekteyiz. Bu politika, 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) kapsamında hazırlanmıştır.',
+            },
+            {
+              baslik: '2. Toplanan Kişisel Veriler',
+              icerik: 'Platformumuzda teklif formu doldurduğunuzda şu bilgileri topluyoruz:\n\n• Ad ve soyadınız\n• Telefon numaranız\n• E-posta adresiniz (opsiyonel)\n• Etkinlik tarihi ve kişi sayısı bilgisi\n• İletişim notlarınız',
+            },
+            {
+              baslik: '3. Verilerin İşlenme Amacı',
+              icerik: 'Toplanan kişisel veriler yalnızca şu amaçlarla işlenmektedir:\n\n• Talep ettiğiniz mekan hakkında size fiyat teklifi sunulması\n• Mekan sahiplerinin başvurunuza geri dönebilmesi\n• Başvuru sürecinizin takip edilebilmesi\n• Yasal yükümlülüklerin yerine getirilmesi',
+            },
+            {
+              baslik: '4. Veri Paylaşımı',
+              icerik: 'Kişisel verileriniz yalnızca teklif talep ettiğiniz mekanın sahibiyle paylaşılır. Üçüncü taraflarla, iş ortaklarıyla veya reklam şirketleriyle kesinlikle paylaşılmaz. Yasal zorunluluk olmadıkça hiçbir kurumla paylaşılmaz.',
+            },
+            {
+              baslik: '5. Veri Saklama Süresi',
+              icerik: 'Kişisel verileriniz, amacın gerektirdiği süre boyunca ve ilgili mevzuatın öngördüğü süreler dahilinde saklanır. Talep formlarındaki bilgiler en fazla 2 yıl saklanmaktadır.',
+            },
+            {
+              baslik: '6. KVKK Kapsamındaki Haklarınız',
+              icerik: '6698 sayılı Kanun\'un 11. maddesi uyarınca aşağıdaki haklara sahipsiniz:\n\n• Kişisel verilerinizin işlenip işlenmediğini öğrenme\n• İşlenmişse buna ilişkin bilgi talep etme\n• İşlenme amacını ve bunların amacına uygun kullanılıp kullanılmadığını öğrenme\n• Yurt içinde veya yurt dışında kişisel verilerinizin aktarıldığı üçüncü kişileri bilme\n• Kişisel verilerinizin eksik veya yanlış işlenmiş olması hâlinde bunların düzeltilmesini isteme\n• Kişisel verilerinizin silinmesini veya yok edilmesini isteme',
+            },
+            {
+              baslik: '7. İletişim',
+              icerik: 'KVKK kapsamındaki haklarınızı kullanmak veya sorularınız için bizimle iletişime geçebilirsiniz:\n\nE-posta: kvkk@etkinlink.com\nAdres: İstanbul, Türkiye',
+            },
+            {
+              baslik: '8. Çerezler',
+              icerik: 'Uygulamamız oturum bilgilerini cihazınızda yerel olarak saklar. Bu veriler yalnızca giriş durumunuzu hatırlamak için kullanılır ve hiçbir analiz veya reklam amacıyla işlenmez.',
+            },
+          ].map((b, i) => (
+            <View key={i} style={styles.gizlilikBolum}>
+              <Text style={styles.gizlilikBaslik}>{b.baslik}</Text>
+              <Text style={styles.gizlilikIcerik}>{b.icerik}</Text>
+            </View>
+          ))}
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+        <View style={{ paddingHorizontal: 24, paddingBottom: 24, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border }}>
+          <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]} onPress={onKapat}>
+            <Text style={styles.teklifBtnText}>Anladım, Kapat</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ── 5. HATA SAYFASI ──────────────────────────────────────
+function HataSayfasi({ hata, onYeniden }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' }]}>
+      <Animated.View style={{ alignItems: 'center', paddingHorizontal: 40, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <View style={styles.hataIkonContainer}>
+          <Text style={styles.hataIkon}>📡</Text>
+        </View>
+        <Text style={styles.hataBaslik}>Bağlantı Sorunu</Text>
+        <Text style={styles.hataAciklama}>
+          {hata || 'İnternet bağlantınızı kontrol edin ve tekrar deneyin.'}
+        </Text>
+        <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight, paddingHorizontal: 32, marginTop: 24 }]} onPress={onYeniden}>
+          <Text style={styles.teklifBtnText}>🔄 Tekrar Dene</Text>
+        </TouchableOpacity>
+        <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 20, textAlign: 'center', lineHeight: 18 }}>
+          Sorun devam ederse{'\n'}
+          <Text style={{ color: C.gold }}>destek@etkinlink.com</Text> adresine yazın.
+        </Text>
+      </Animated.View>
+    </SafeAreaView>
+  );
+}
+
 // ── ARAMA ÇUBUĞU ─────────────────────────────────────────
 function AramaComubugu({ arama, setArama }) {
   const [odakta, setOdakta] = useState(false);
@@ -400,6 +533,7 @@ function KullaniciPaneli({ kullanici, onCikis }) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.adminKartIsim}>{b.mekan_isim}</Text>
                     {b.kisi_sayisi ? <Text style={styles.adminKartDetay}>👥 {b.kisi_sayisi} kişi</Text> : null}
+                    {b.etkinlik_tarihi ? <Text style={styles.adminKartDetay}>📅 {b.etkinlik_tarihi}</Text> : null}
                     {b.alt_kategori ? <Text style={styles.adminKartDetay}>🎉 {b.alt_kategori}</Text> : null}
                     {b.notlar ? <Text style={styles.adminKartDetay}>💬 {b.notlar}</Text> : null}
                     <Text style={styles.adminKartTarih}>{formatTarih(b.created_at)}</Text>
@@ -429,6 +563,10 @@ function SahipGirisEkrani({ onGiris, onKapat }) {
   const [firmaAdi, setFirmaAdi] = useState('');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState('');
+  // 4. Şifre sıfırlama state
+  const [sifreSifirlamaModu, setSifreSifirlamaModu] = useState(false);
+  const [sifreSifirlamaEmail, setSifreSifirlamaEmail] = useState('');
+  const [sifreSifirlamaGonderildi, setSifreSifirlamaGonderildi] = useState(false);
 
   async function girisYap() {
     if (!email || !sifre) { setHata('E-posta ve şifre zorunlu!'); return; }
@@ -451,6 +589,75 @@ function SahipGirisEkrani({ onGiris, onKapat }) {
       onGiris(data.user);
     }
     setYukleniyor(false);
+  }
+
+  // 4. Şifre sıfırlama fonksiyonu
+  async function sifreSifirla() {
+    if (!sifreSifirlamaEmail) { setHata('E-posta adresinizi girin.'); return; }
+    setYukleniyor(true); setHata('');
+    const { error } = await supabase.auth.resetPasswordForEmail(sifreSifirlamaEmail, {
+      redirectTo: 'https://etkinlink.com/sifre-sifirla',
+    });
+    setYukleniyor(false);
+    if (error) { setHata('Hata: ' + error.message); return; }
+    setSifreSifirlamaGonderildi(true);
+  }
+
+  // Şifre sıfırlama ekranı
+  if (sifreSifirlamaModu) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: C.bg }]}>
+        <TouchableOpacity onPress={() => { setSifreSifirlamaModu(false); setHata(''); setSifreSifirlamaGonderildi(false); }}
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 20, paddingBottom: 8 }}>
+          <Text style={{ fontSize: 18, color: C.midnight, marginRight: 8 }}>←</Text>
+          <Text style={{ fontSize: 14, color: C.midnight, fontWeight: '600' }}>Geri Dön</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: C.white, borderRadius: 24, padding: 28, borderWidth: 1, borderColor: C.border }}>
+            <Text style={{ fontSize: 24, textAlign: 'center', marginBottom: 8 }}>🔑</Text>
+            <Text style={[styles.formBaslik, { textAlign: 'center', fontSize: 20 }]}>Şifre Sıfırla</Text>
+            {sifreSifirlamaGonderildi ? (
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 40, marginBottom: 16 }}>📧</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: C.success, marginBottom: 8 }}>E-posta Gönderildi!</Text>
+                <Text style={{ color: C.textMid, textAlign: 'center', lineHeight: 22, fontSize: 14 }}>
+                  <Text style={{ fontWeight: '700' }}>{sifreSifirlamaEmail}</Text> adresine şifre sıfırlama bağlantısı gönderdik.
+                  {'\n\n'}Gelen kutunuzu ve spam klasörünüzü kontrol edin.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.teklifBtn, { backgroundColor: C.midnight, marginTop: 24, paddingHorizontal: 32 }]}
+                  onPress={() => { setSifreSifirlamaModu(false); setSifreSifirlamaGonderildi(false); }}>
+                  <Text style={styles.teklifBtnText}>Giriş Sayfasına Dön</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <Text style={{ color: C.textMid, textAlign: 'center', marginBottom: 24, fontSize: 14, lineHeight: 20 }}>
+                  Kayıtlı e-posta adresinizi girin. Şifre sıfırlama bağlantısı göndereceğiz.
+                </Text>
+                <Text style={styles.inputEtiket}>E-posta Adresi</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="email@ornek.com"
+                  placeholderTextColor={C.textSoft}
+                  value={sifreSifirlamaEmail}
+                  onChangeText={setSifreSifirlamaEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {hata ? <Text style={{ color: C.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{hata}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.teklifBtn, { backgroundColor: C.midnight }]}
+                  onPress={sifreSifirla}
+                  disabled={yukleniyor}>
+                  <Text style={styles.teklifBtnText}>{yukleniyor ? 'Gönderiliyor...' : '📧 Sıfırlama Bağlantısı Gönder'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -489,6 +696,16 @@ function SahipGirisEkrani({ onGiris, onKapat }) {
           <Text style={styles.inputEtiket}>Şifre *</Text>
           <TextInput style={styles.formInput} placeholder="En az 6 karakter" placeholderTextColor={C.textSoft} value={sifre} onChangeText={setSifre} secureTextEntry />
           {hata ? <Text style={{ color: C.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{hata}</Text> : null}
+
+          {/* 4. Şifremi Unuttum butonu — sadece giriş modunda */}
+          {mod === 'giris' && (
+            <TouchableOpacity
+              onPress={() => { setSifreSifirlamaModu(true); setHata(''); setSifreSifirlamaEmail(email); }}
+              style={{ alignSelf: 'flex-end', marginBottom: 16, marginTop: -4 }}>
+              <Text style={{ color: C.gold, fontSize: 13, fontWeight: '600' }}>Şifremi unuttum →</Text>
+            </TouchableOpacity>
+          )}
+
           {mod === 'kayit' && (
             <View style={{ backgroundColor: C.goldSoft, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.goldLight }}>
               <Text style={{ color: C.gold, fontWeight: '700', fontSize: 14, marginBottom: 4 }}>🎁 Hoş Geldiniz Hediyesi!</Text>
@@ -652,7 +869,6 @@ function SahipPaneli({ kullanici, onCikis }) {
 
   useEffect(() => { veriGetir(); }, []);
 
-  // ── DÜZELTİLDİ: veriGetir fonksiyonu düzgün kapatılıyor ──
   async function veriGetir(yenile = false) {
     if (yenile) setYenileniyor(true); else setYukleniyor(true);
 
@@ -667,13 +883,11 @@ function SahipPaneli({ kullanici, onCikis }) {
 
     const mekanIdleri = (mekanData || []).map(m => m.id);
 
-    // 1. sahip_id ile direkt çek (yeni leadler)
     const { data: leadsBySahip } = await supabase
       .from('leads').select('*')
       .eq('sahip_id', kullanici.id)
       .order('created_at', { ascending: false });
 
-    // 2. mekan_id listesiyle çek (eski leadler)
     let leadsByMekan = [];
     if (mekanIdleri.length > 0) {
       const { data } = await supabase
@@ -683,7 +897,6 @@ function SahipPaneli({ kullanici, onCikis }) {
       leadsByMekan = data || [];
     }
 
-    // Birleştir, duplicate'leri temizle
     const tumLeadler = [...(leadsBySahip || []), ...leadsByMekan];
     const tekLeadler = Array.from(new Map(tumLeadler.map(l => [l.id, l])).values())
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -697,7 +910,6 @@ function SahipPaneli({ kullanici, onCikis }) {
     setYukleniyor(false);
     setYenileniyor(false);
   }
-  // ─────────────────────────────────────────────────────────
 
   if (yukleniyor) return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' }]}>
@@ -756,7 +968,6 @@ function SahipPaneli({ kullanici, onCikis }) {
         </TouchableOpacity>
       </View>
 
-      {/* BAKİYE KARTI */}
       <View style={styles.bakiyeKart}>
         <View style={{ flex: 1 }}>
           <Text style={styles.bakiyeEtiket}>Mevcut Bakiye</Text>
@@ -773,7 +984,6 @@ function SahipPaneli({ kullanici, onCikis }) {
         </View>
       </View>
 
-      {/* TABLAR */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 52 }}>
         <View style={[styles.tabRow, { paddingHorizontal: 16 }]}>
           {[
@@ -794,7 +1004,6 @@ function SahipPaneli({ kullanici, onCikis }) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={() => veriGetir(true)} tintColor={C.midnight} />}
       >
-        {/* GENEL TAB */}
         {aktifTab === 'genel' && (
           <View style={{ padding: 16 }}>
             <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
@@ -810,8 +1019,6 @@ function SahipPaneli({ kullanici, onCikis }) {
                 </View>
               ))}
             </View>
-
-            {/* Son leadler */}
             {leadler.length > 0 && (
               <>
                 <Text style={[styles.inputEtiket, { marginBottom: 10, fontSize: 14, fontWeight: '700', color: C.text }]}>Son Talepler</Text>
@@ -828,7 +1035,6 @@ function SahipPaneli({ kullanici, onCikis }) {
                 )}
               </>
             )}
-
             {leadler.length === 0 && (
               <View style={styles.bosEkran}>
                 <Text style={styles.bosEkranEmoji}>📭</Text>
@@ -838,7 +1044,6 @@ function SahipPaneli({ kullanici, onCikis }) {
           </View>
         )}
 
-        {/* MEKANLARIM TAB */}
         {aktifTab === 'mekanlar' && (
           <View style={{ padding: 16 }}>
             <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight, marginBottom: 16 }]} onPress={() => setMekanEklemeAcik(true)}>
@@ -876,10 +1081,8 @@ function SahipPaneli({ kullanici, onCikis }) {
           </View>
         )}
 
-        {/* TALEPLER TAB */}
         {aktifTab === 'leadler' && (
           <View style={{ padding: 16 }}>
-            {/* Özet bilgi */}
             {leadler.length > 0 && (
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
                 {[
@@ -911,7 +1114,6 @@ function SahipPaneli({ kullanici, onCikis }) {
           </View>
         )}
 
-        {/* BAKİYE TAB */}
         {aktifTab === 'bakiye' && (
           <View style={{ padding: 16 }}>
             <View style={[styles.bakiyeKart, { marginBottom: 20 }]}>
@@ -969,7 +1171,7 @@ function SahipPaneli({ kullanici, onCikis }) {
   );
 }
 
-// ── LEAD KARTI (yeniden kullanılabilir bileşen) ───────────
+// ── LEAD KARTI ────────────────────────────────────────────
 function LeadKarti({ lead: l, onDurumGuncelle }) {
   const bekliyor = !l.durum || l.durum === 'bekliyor';
   return (
@@ -986,11 +1188,11 @@ function LeadKarti({ lead: l, onDurumGuncelle }) {
         <Text style={styles.adminKartDetay}>📞 {l.telefon}</Text>
         <Text style={styles.adminKartDetay}>🏢 {l.mekan_isim}</Text>
         {l.kisi_sayisi ? <Text style={styles.adminKartDetay}>👥 {l.kisi_sayisi} kişi</Text> : null}
+        {l.etkinlik_tarihi ? <Text style={styles.adminKartDetay}>📅 {l.etkinlik_tarihi}</Text> : null}
         {l.alt_kategori ? <Text style={styles.adminKartDetay}>🎉 {l.alt_kategori}</Text> : null}
         {l.notlar ? <Text style={styles.adminKartDetay}>💬 {l.notlar}</Text> : null}
         <Text style={styles.adminKartTarih}>{formatTarih(l.created_at)}</Text>
 
-        {/* Hızlı iletişim butonları */}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 4 }}>
           <TouchableOpacity
             style={[styles.durumBtn, { borderColor: C.whatsapp, flex: 1, alignItems: 'center' }]}
@@ -1013,7 +1215,6 @@ function LeadKarti({ lead: l, onDurumGuncelle }) {
           </TouchableOpacity>
         </View>
 
-        {/* Durum güncelleme */}
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           {['bekliyor', 'aranıyor', 'tamamlandı'].map(d => (
             <TouchableOpacity
@@ -1072,14 +1273,16 @@ function VideoOynatici({ url }) {
   return <View style={styles.videoContainer}><Text style={{ color: C.textSoft, textAlign: 'center', padding: 20 }}>Video için tarayıcıda açın.</Text></View>;
 }
 
-// ── TEKLİF FORMU ──────────────────────────────────────────
-function TeklifFormu({ mekan, onKapat, onGonder, kullanici }) {
+// ── TEKLİF FORMU (KVKK Onaylı) ───────────────────────────
+function TeklifFormu({ mekan, onKapat, onGonder, kullanici, onGizlilikAc }) {
   const [ad, setAd] = useState(kullanici?.ad_soyad || '');
   const [telefon, setTelefon] = useState(kullanici?.telefon || '');
   const [kisi, setKisi] = useState('');
   const [notlar, setNotlar] = useState('');
   const [tarih, setTarih] = useState('');
+  const [kvkkOnay, setKvkkOnay] = useState(false);  // 1. KVKK state
   const [gonderiliyor, setGonderiliyor] = useState(false);
+  const [kvkkHata, setKvkkHata] = useState(false);
   const slideAnim = useRef(new Animated.Value(400)).current;
 
   useEffect(() => {
@@ -1090,6 +1293,9 @@ function TeklifFormu({ mekan, onKapat, onGonder, kullanici }) {
 
   async function gonder() {
     if (!ad || !telefon) { alert('Lütfen ad ve telefon giriniz.'); return; }
+    // 1. KVKK kontrolü
+    if (!kvkkOnay) { setKvkkHata(true); return; }
+    setKvkkHata(false);
     setGonderiliyor(true);
     await onGonder({ ad, telefon, kisi, notlar, tarih });
     setGonderiliyor(false);
@@ -1104,11 +1310,28 @@ function TeklifFormu({ mekan, onKapat, onGonder, kullanici }) {
         <TextInput style={styles.formInput} placeholder="Ad Soyad *" placeholderTextColor={C.textSoft} value={ad} onChangeText={setAd} />
         <TextInput style={styles.formInput} placeholder="Telefon *" placeholderTextColor={C.textSoft} value={telefon} onChangeText={setTelefon} keyboardType="phone-pad" />
         <TextInput style={styles.formInput} placeholder="Kişi Sayısı" placeholderTextColor={C.textSoft} value={kisi} onChangeText={setKisi} keyboardType="numeric" />
+        {/* 3. Etkinlik tarihi — artık Supabase'de kolonu var */}
         <TextInput style={styles.formInput} placeholder="Etkinlik Tarihi (gg.aa.yyyy)" placeholderTextColor={C.textSoft} value={tarih} onChangeText={setTarih} />
         <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
           placeholder={isRomantik ? 'Sürpriz detaylar...' : 'Notlar (opsiyonel)'}
           placeholderTextColor={C.textSoft} value={notlar} onChangeText={setNotlar} multiline />
-        <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: isRomantik ? C.romantic : C.midnight }]} onPress={gonder} disabled={gonderiliyor}>
+
+        {/* 1. KVKK Onay Kutusu */}
+        <KVKKOnayKutusu
+          onayVerildi={kvkkOnay}
+          setOnayVerildi={(val) => { setKvkkOnay(val); if (val) setKvkkHata(false); }}
+          onGizlilikAc={onGizlilikAc}
+        />
+        {kvkkHata && (
+          <Text style={{ color: C.danger, fontSize: 12, marginBottom: 10, marginTop: -4 }}>
+            ⚠️ Devam etmek için gizlilik politikasını onaylamanız gerekiyor.
+          </Text>
+        )}
+
+        <TouchableOpacity
+          style={[styles.teklifBtn, { backgroundColor: isRomantik ? C.romantic : C.midnight, opacity: kvkkOnay ? 1 : 0.7 }]}
+          onPress={gonder}
+          disabled={gonderiliyor}>
           <Text style={styles.teklifBtnText}>{gonderiliyor ? 'Gönderiliyor...' : '✓ Talebi Gönder'}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center' }}>
@@ -1573,7 +1796,6 @@ function AdminPanel({ onCikis }) {
 
   async function mekanOnayla(id, sahipId) {
     await apiPatch(`mekanlar?id=eq.${id}`, { onay_durumu: 'onaylandi', aktif: true });
-    // Sahibe bildirim e-postası gönder (opsiyonel)
     veriGetir();
     alert('✅ Mekan onaylandı!');
   }
@@ -1670,7 +1892,6 @@ function AdminPanel({ onCikis }) {
       </ScrollView>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        {/* ONAY TAB */}
         {aktifTab === 'onay' && (
           <View style={{ padding: 16 }}>
             {bekleyenMekanlar.length === 0
@@ -1697,7 +1918,6 @@ function AdminPanel({ onCikis }) {
           </View>
         )}
 
-        {/* LEADS TAB */}
         {aktifTab === 'leads' && (
           <View style={{ padding: 16 }}>
             {leads.length === 0
@@ -1708,6 +1928,7 @@ function AdminPanel({ onCikis }) {
                     <Text style={styles.adminKartIsim}>{l.ad_soyad}</Text>
                     <Text style={styles.adminKartDetay}>📞 {l.telefon}</Text>
                     <Text style={styles.adminKartDetay}>🏢 {l.mekan_isim}</Text>
+                    {l.etkinlik_tarihi ? <Text style={styles.adminKartDetay}>📅 {l.etkinlik_tarihi}</Text> : null}
                     {l.notlar ? <Text style={styles.adminKartDetay}>💬 {l.notlar}</Text> : null}
                     <Text style={styles.adminKartTarih}>{formatTarih(l.created_at)}</Text>
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
@@ -1731,7 +1952,6 @@ function AdminPanel({ onCikis }) {
           </View>
         )}
 
-        {/* MEKANLAR TAB */}
         {aktifTab === 'mekanlar' && (
           <View style={{ padding: 16 }}>
             {mekanlar.map(m => (
@@ -1756,7 +1976,6 @@ function AdminPanel({ onCikis }) {
           </View>
         )}
 
-        {/* EKLE TAB */}
         {aktifTab === 'ekle' && (
           <View style={{ padding: 16 }}>
             <Text style={styles.formBaslik}>Yeni Mekan Ekle</Text>
@@ -1829,7 +2048,6 @@ function AdminPanel({ onCikis }) {
           </View>
         )}
 
-        {/* ÜYELER TAB */}
         {aktifTab === 'uyeler' && (
           <View style={{ padding: 16 }}>
             {sahipler.length === 0
@@ -1881,6 +2099,9 @@ export default function App() {
   const [seciliMekan, setSeciliMekan] = useState(null);
   const [basariMesaji, setBasariMesaji] = useState(null);
   const [logoTiklama, setLogoTiklama] = useState(0);
+  // 2. & 5. Gizlilik ve hata state'leri
+  const [gizlilikAcik, setGizlilikAcik] = useState(false);
+  const [yuklenmeHatasi, setYuklenmeHatasi] = useState(null);
 
   const romantikMod = anaKategori === 'ozel_gunler' && altKategori === 'evlenme_teklifi';
 
@@ -1897,14 +2118,23 @@ export default function App() {
     }
   }, []);
 
+  // 5. Hata yakalayan veriGetir
   async function veriGetir(yenile = false) {
     if (yenile) setYenileniyor(true); else setYukleniyor(true);
+    setYuklenmeHatasi(null);
     try {
       const m = await apiFetch('mekanlar?select=*&aktif=eq.true&onay_durumu=eq.onaylandi&order=one_cikan.desc,puan.desc');
       const b = await apiFetch('sezonsal_bannerlar?select=*&aktif=eq.true&limit=1');
-      setMekanlar(Array.isArray(m) ? m : []);
+      if (!Array.isArray(m)) {
+        setYuklenmeHatasi('Mekanlar yüklenemedi. İnternet bağlantınızı kontrol edin.');
+      } else {
+        setMekanlar(m);
+      }
       setBanner(Array.isArray(b) && b.length > 0 ? b[0] : null);
-    } catch (e) { console.log('Hata:', e.message); }
+    } catch (e) {
+      setYuklenmeHatasi('Bağlantı hatası oluştu. Lütfen tekrar deneyin.');
+      console.log('Hata:', e.message);
+    }
     setYukleniyor(false);
     setYenileniyor(false);
   }
@@ -1938,10 +2168,10 @@ export default function App() {
         ana_kategori: anaKategori,
         alt_kategori: altKategori,
         notlar: notlar || null,
-        etkinlik_tarihi: tarih || null,
+        etkinlik_tarihi: tarih || null,  // 3. etkinlik_tarihi kolonu
         iletisim_turu: 'form',
         kullanici_id: kullanici?.id || null,
-        sahip_id: mekanSahipId || null,  // ← Mekan sahibine bağla
+        sahip_id: mekanSahipId || null,
       });
 
       if (mekanSahipId) {
@@ -1952,7 +2182,6 @@ export default function App() {
         }
       }
 
-      // Mail bildirimi
       await fetch('https://svaqquywnidqecbcwaqe.supabase.co/functions/v1/lead-bildirim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
@@ -1965,7 +2194,6 @@ export default function App() {
     setTimeout(() => setBasariMesaji(null), 5000);
   }
 
-  // Gelişmiş filtreleme
   const filtrelenmis = mekanlar.filter(m => {
     if (anaKategori !== 'hepsi' && anaKategori !== 'populer' && m.ana_kategori !== anaKategori) return false;
     if (anaKategori === 'populer' && !m.one_cikan) return false;
@@ -1996,11 +2224,25 @@ export default function App() {
   if (ekran === 'sahipPanel' && sahipKullanici) return <SahipPaneli kullanici={sahipKullanici} onCikis={() => { setSahipKullanici(null); setEkran('ana'); }} />;
   if (ekran === 'kullaniciPanel' && kullanici) return <KullaniciPaneli kullanici={kullanici} onCikis={kullaniciCikis} />;
 
+  // 5. Hata sayfası — yalnızca ilk yükleme başarısız olursa göster
+  if (yuklenmeHatasi && mekanlar.length === 0 && !yukleniyor) {
+    return <HataSayfasi hata={yuklenmeHatasi} onYeniden={() => veriGetir()} />;
+  }
+
   if (seciliDetay) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar style="light" />
       <MekanDetay mekan={seciliDetay} onGeri={() => setSeciliDetay(null)} onTeklif={teklifAc} kullanici={kullanici} />
-      {seciliMekan && <TeklifFormu mekan={seciliMekan} onKapat={() => setSeciliMekan(null)} onGonder={leadKaydet} kullanici={kullanici} />}
+      {seciliMekan && (
+        <TeklifFormu
+          mekan={seciliMekan}
+          onKapat={() => setSeciliMekan(null)}
+          onGonder={leadKaydet}
+          kullanici={kullanici}
+          onGizlilikAc={() => setGizlilikAcik(true)}
+        />
+      )}
+      {gizlilikAcik && <GizlilikPolitikasi onKapat={() => setGizlilikAcik(false)} />}
       {basariMesaji && <View style={styles.toast}><Text style={styles.toastText}>{basariMesaji}</Text></View>}
     </SafeAreaView>
   );
@@ -2010,7 +2252,17 @@ export default function App() {
       <StatusBar style="dark" />
       {kullaniciGirisAcik && <KullaniciGirisEkrani onGiris={kullaniciGirisYap} onKapat={() => setKullaniciGirisAcik(false)} />}
       {basariMesaji && <View style={styles.toast}><Text style={styles.toastText}>{basariMesaji}</Text></View>}
-      {seciliMekan && <TeklifFormu mekan={seciliMekan} onKapat={() => setSeciliMekan(null)} onGonder={leadKaydet} kullanici={kullanici} />}
+      {seciliMekan && (
+        <TeklifFormu
+          mekan={seciliMekan}
+          onKapat={() => setSeciliMekan(null)}
+          onGonder={leadKaydet}
+          kullanici={kullanici}
+          onGizlilikAc={() => setGizlilikAcik(true)}
+        />
+      )}
+      {/* 2. Gizlilik Politikası modal */}
+      {gizlilikAcik && <GizlilikPolitikasi onKapat={() => setGizlilikAcik(false)} />}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -2082,7 +2334,6 @@ export default function App() {
           ))}
         </ScrollView>
 
-        {/* SONUÇ SAYISI + FİLTRE TEMİZLE */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 16, marginBottom: 8 }}>
           <Text style={styles.sonucSayisi}>{filtrelenmis.length} mekan{arama ? ` "${arama}" için` : ''}</Text>
           {(arama || altKategori || fizikselFiltre) && (
@@ -2091,6 +2342,17 @@ export default function App() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 5. Bağlantı hatası bildirimi (list içinde, ama mekanlar varsa) */}
+        {yuklenmeHatasi && mekanlar.length > 0 && (
+          <View style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: C.dangerSoft, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.danger + '30' }}>
+            <Text style={{ fontSize: 16, marginRight: 8 }}>⚠️</Text>
+            <Text style={{ color: C.danger, fontSize: 13, flex: 1 }}>Veriler güncellenirken hata oluştu.</Text>
+            <TouchableOpacity onPress={() => veriGetir(true)}>
+              <Text style={{ color: C.danger, fontWeight: '700', fontSize: 13 }}>Yenile</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* MEKAN LİSTESİ */}
         {yukleniyor ? (
@@ -2113,7 +2375,16 @@ export default function App() {
             )}
           </View>
         )}
-        <View style={{ height: 60 }} />
+
+        {/* 2. GİZLİLİK LİNKİ — Footer */}
+        <TouchableOpacity
+          onPress={() => setGizlilikAcik(true)}
+          style={{ alignItems: 'center', padding: 20, paddingTop: 8 }}>
+          <Text style={{ color: C.textSoft, fontSize: 12 }}>
+            🔒 <Text style={{ textDecorationLine: 'underline' }}>Gizlilik Politikası</Text> · KVKK
+          </Text>
+        </TouchableOpacity>
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -2238,4 +2509,22 @@ const styles = StyleSheet.create({
   bakiyeEtiket:        { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 },
   bakiyeMiktar:        { fontSize: 36, fontWeight: '800', color: C.gold },
   bakiyeAciklama:      { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
+  // 1. KVKK stilleri
+  kvkkRow:             { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 10 },
+  kvkkCheckbox:        { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: C.border, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', marginTop: 1, flexShrink: 0 },
+  kvkkCheckboxAktif:   { backgroundColor: C.midnight, borderColor: C.midnight },
+  kvkkCheckMark:       { color: C.white, fontSize: 13, fontWeight: '700' },
+  kvkkText:            { flex: 1, fontSize: 13, lineHeight: 20 },
+  kvkkTextNormal:      { color: C.textMid },
+  kvkkLink:            { color: C.gold, fontWeight: '600', textDecorationLine: 'underline' },
+  // 2. Gizlilik stilleri
+  gizlilikTarih:       { fontSize: 12, color: C.textSoft, marginBottom: 20 },
+  gizlilikBolum:       { marginBottom: 20 },
+  gizlilikBaslik:      { fontSize: 15, fontWeight: '700', color: C.midnight, marginBottom: 8 },
+  gizlilikIcerik:      { fontSize: 14, color: C.textMid, lineHeight: 22 },
+  // 5. Hata sayfası stilleri
+  hataIkonContainer:   { width: 100, height: 100, borderRadius: 50, backgroundColor: C.border, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  hataIkon:            { fontSize: 44 },
+  hataBaslik:          { fontSize: 22, fontWeight: '800', color: C.text, marginBottom: 12, textAlign: 'center' },
+  hataAciklama:        { fontSize: 15, color: C.textMid, textAlign: 'center', lineHeight: 22 },
 });
