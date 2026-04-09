@@ -2270,15 +2270,20 @@ export default function App() {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => {
-            const yeni = logoTiklama + 1;
-            setLogoTiklama(yeni);
-            if (yeni >= ADMIN_TIKLAMA_SAYISI) { setLogoTiklama(0); setEkran('adminGiris'); }
-          }}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: IS_DESKTOP ? 12 : 10 }}
+            onPress={() => {
+              const yeni = logoTiklama + 1;
+              setLogoTiklama(yeni);
+              if (yeni >= ADMIN_TIKLAMA_SAYISI) { setLogoTiklama(0); setEkran('adminGiris'); }
+            }}>
             <Image source={require('./assets/logo.png')}
-              style={{ width: IS_DESKTOP ? 220 : 170, height: IS_DESKTOP ? 60 : 48 }}
+              style={{ width: IS_DESKTOP ? 48 : 38, height: IS_DESKTOP ? 48 : 38 }}
               resizeMode="contain" />
-            <Text style={styles.slogan}>Etkinliğin için en iyi mekanı bul</Text>
+            <View>
+              <Text style={[styles.logoText, IS_DESKTOP && styles.logoTextDesktop]}>etkinlink</Text>
+              <Text style={styles.slogan}>Etkinliğin için en uygun mekanı bul</Text>
+            </View>
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <TouchableOpacity
@@ -2397,6 +2402,10 @@ const styles = StyleSheet.create({
   toastText:           { color: C.success, fontWeight: '600', textAlign: 'center', fontSize: 14 },
   header:              { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 },
   logo:                { fontSize: 26, fontWeight: '800', color: C.midnight, letterSpacing: -1 },
+  logoText:            { fontSize: IS_DESKTOP ? 21 : 17, fontWeight: '700', color: C.midnight, letterSpacing: -0.6 },
+  logoTextDesktop:     { fontSize: 23, letterSpacing: -0.8 },
+  logoEtkin:           { color: C.midnight, fontWeight: '500' },
+  logoLink:            { color: C.gold, fontWeight: '800' },
   slogan:              { fontSize: 11, color: C.midnight, marginTop: 2, letterSpacing: 1.2, textTransform: 'uppercase', fontWeight: '500', opacity: 0.45 },
   banner:              { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16, borderWidth: 1, gap: 12, marginBottom: 4 },
   bannerEmoji:         { fontSize: 24 },
