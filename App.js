@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
   Image, SafeAreaView, TextInput, ActivityIndicator,
@@ -28,6 +28,11 @@ const HEADERS = {
 async function apiFetch(endpoint) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, { headers: HEADERS });
+    if (!r.ok) {
+      const errText = await r.text();
+      console.log('apiFetch HTTP hata:', r.status, errText);
+      return [];
+    }
     return r.json();
   } catch (e) {
     console.log('apiFetch hata:', e.message);
@@ -41,6 +46,25 @@ async function apiPost(endpoint, body) {
     body: JSON.stringify(body),
   });
 }
+// Güvenli POST — hata durumunda { ok, error, data } döner
+async function apiPostSafe(endpoint, body) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
+      method: 'POST',
+      headers: { ...HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify(body),
+    });
+    let json;
+    try { json = await r.json(); } catch { json = null; }
+    if (!r.ok) {
+      const msg = json?.message || json?.error || json?.hint || `HTTP ${r.status}`;
+      return { ok: false, error: msg, data: null };
+    }
+    return { ok: true, error: null, data: Array.isArray(json) ? json[0] : json };
+  } catch (e) {
+    return { ok: false, error: e.message, data: null };
+  }
+}
 async function apiPatch(endpoint, body) {
   return fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
     method: 'PATCH',
@@ -53,93 +77,119 @@ async function apiDelete(endpoint) {
 }
 
 const C = {
-  bg: '#FAFAF8', bgCard: '#FFFFFF',
+  bg: '#F5F7FA', bgCard: '#FFFFFF',
   gold: '#B8973A', goldLight: '#F0E6C8', goldSoft: '#FBF7EE',
   midnight: '#1A1F36', midnightSoft: '#2D3561',
+  accent: '#0A66C2', accentSoft: '#EBF4FF',   // Kurumsal mavi aksan
   text: '#1A1A1A', textMid: '#555555', textSoft: '#999999',
-  border: '#EBEBEB', romantic: '#8B2252', romanticSoft: '#FDF0F5',
+  border: '#E8ECF0', romantic: '#0A66C2', romanticSoft: '#EBF4FF', // romantic artık kurumsal mavi
   success: '#2D6A4F', successSoft: '#D8F3DC', white: '#FFFFFF',
   danger: '#C0392B', dangerSoft: '#FDECEA',
   whatsapp: '#25D366',
 };
 
 const ANA_KATEGORILER = [
-  { id: 'hepsi',           etiket: 'Tümü',          emoji: '✦' },
-  { id: 'ozel_gunler',     etiket: 'Özel Günler',   emoji: '💍' },
-  { id: 'kurumsal',        etiket: 'Kurumsal',       emoji: '🏛' },
-  { id: 'sosyal_kulturel', etiket: 'Sosyal',         emoji: '🎭' },
-  { id: 'populer',         etiket: 'Popüler Şimdi', emoji: '🔥' },
+  { id: 'hepsi',     etiket: 'Tümü',          emoji: '✦' },
+  { id: 'dis_pazarlama', etiket: 'Pazarlama & Lansman', emoji: '🚀' },
+  { id: 'ic_iletisim',   etiket: 'İç İletişim & Çalışan', emoji: '👥' },
+  { id: 'finansal',      etiket: 'Finansal & Stratejik', emoji: '📊' },
+  { id: 'kss_odulller',  etiket: 'KSS & Ödül',     emoji: '🏆' },
+  { id: 'populer',       etiket: 'Öne Çıkan',       emoji: '✦' },
 ];
 
 const ALT_KATEGORILER = {
-  ozel_gunler: [
-    { id: 'dugun',           etiket: 'Düğün',           emoji: '🌸' },
-    { id: 'nisan',           etiket: 'Nişan',           emoji: '💍' },
-    { id: 'mezuniyet',       etiket: 'Mezuniyet',       emoji: '🎓' },
-    { id: 'dogum_gunu',      etiket: 'Doğum Günü',      emoji: '🎂' },
-    { id: 'evlenme_teklifi', etiket: 'Evlenme Teklifi', emoji: '💝' },
-    { id: 'bekarliga_veda',  etiket: 'Bekarlığa Veda',  emoji: '🥂' },
+  dis_pazarlama: [
+    { id: 'urun_lansmanı',       etiket: 'Ürün Lansmanı',       emoji: '🚀' },
+    { id: 'konferans_seminer',   etiket: 'Konferans & Seminer',  emoji: '🎤' },
+    { id: 'bayi_toplantisi',     etiket: 'Bayi Toplantısı',      emoji: '🤝' },
+    { id: 'vip_musteri_gunu',    etiket: 'VIP Müşteri Günü',     emoji: '💎' },
+    { id: 'fuar',                etiket: 'Fuar & Sergi',         emoji: '🏪' },
+    { id: 'basın_toplantisi',    etiket: 'Basın Toplantısı',     emoji: '📰' },
   ],
-  kurumsal: [
-    { id: 'sirket_toplantisi',   etiket: 'Şirket Toplantısı',   emoji: '💼' },
-    { id: 'yatirimci_bulusmasi', etiket: 'Yatırımcı Buluşması', emoji: '📊' },
-    { id: 'sirket_etkinligi',    etiket: 'Şirket Etkinliği',    emoji: '🏢' },
-    { id: 'yilbasi_partisi',     etiket: 'Yılbaşı Partisi',     emoji: '🎊' },
+  ic_iletisim: [
+    { id: 'team_building',       etiket: 'Team Building',        emoji: '🎯' },
+    { id: 'town_hall',           etiket: 'Town Hall & Motivasyon', emoji: '🏛' },
+    { id: 'sirket_yildonumu',    etiket: 'Şirket Yıldönümü',     emoji: '🎊' },
+    { id: 'egitim_calistay',     etiket: 'Eğitim & Çalıştay',    emoji: '📚' },
+    { id: 'yilsonu_yemegi',      etiket: 'Yılsonu Yemeği',       emoji: '🍽' },
+    { id: 'issagliği_refahı',    etiket: 'Çalışan Refahı',       emoji: '🌿' },
   ],
-  sosyal_kulturel: [
-    { id: 'panel',  etiket: 'Panel/Konferans', emoji: '🎤' },
-    { id: 'zirve',  etiket: 'Zirve',           emoji: '⭐' },
-    { id: 'fuar',   etiket: 'Fuar',            emoji: '🏪' },
-    { id: 'konser', etiket: 'Konser',          emoji: '🎵' },
+  finansal: [
+    { id: 'ipo_roadshow',        etiket: 'IPO & Roadshow',       emoji: '📈' },
+    { id: 'yillik_genel_kurul',  etiket: 'Genel Kurul',          emoji: '⚖️' },
+    { id: 'yatirimci_toplantisi', etiket: 'Yatırımcı Toplantısı', emoji: '💼' },
+    { id: 'stratejik_ortaklik',  etiket: 'Stratejik Ortaklık',   emoji: '🔗' },
+  ],
+  kss_odulller: [
+    { id: 'surdurulebilirlik',   etiket: 'Sürdürülebilirlik & KSS', emoji: '🌍' },
+    { id: 'odul_toreni',         etiket: 'Ödül Töreni',           emoji: '🏆' },
+    { id: 'sponsorluk',          etiket: 'Sponsorluk Etkinliği',  emoji: '🤲' },
+    { id: 'zirve_panel',         etiket: 'Zirve & Panel',         emoji: '⭐' },
   ],
 };
 
-const FIZIKSEL_FILTRELER = [
-  { id: 'Teras',        etiket: 'Teras',        emoji: '🌅' },
-  { id: 'Bahçe',        etiket: 'Bahçe',        emoji: '🌿' },
-  { id: 'Deniz Kenarı', etiket: 'Deniz Kenarı', emoji: '🌊' },
-  { id: 'Havuz',        etiket: 'Havuz',        emoji: '🏊' },
-  { id: 'Kapalı Alan',  etiket: 'Kapalı',       emoji: '🏛' },
-  { id: 'Özel Oda',     etiket: 'Özel Oda',     emoji: '🚪' },
+const ILETISIM_TURLERI = [
+  { id: 'form',     etiket: 'Teklif Formu', emoji: '📋', renk: C.midnight },
+  { id: 'whatsapp', etiket: 'WhatsApp',     emoji: '💬', renk: '#25D366' },
+  { id: 'telefon',  etiket: 'Telefon',      emoji: '📞', renk: '#2D3561' },
+  { id: 'email',    etiket: 'E-posta',      emoji: '📧', renk: '#0A66C2' },
 ];
 
-const ILETISIM_TURLERI = [
-  { id: 'whatsapp', etiket: 'WhatsApp',     emoji: '💬', renk: '#25D366' },
-  { id: 'telefon',  etiket: 'Telefon',      emoji: '📞', renk: C.midnight },
-  { id: 'email',    etiket: 'E-posta',      emoji: '📧', renk: C.midnightSoft },
-  { id: 'form',     etiket: 'Teklif Formu', emoji: '📋', renk: C.gold },
+const FIZIKSEL_FILTRELER = [
+  { id: 'Konferans Salonu', etiket: 'Konferans Salonu', emoji: '🎤' },
+  { id: 'Brifing Odası',    etiket: 'Brifing Odası',    emoji: '📋' },
+  { id: 'Teras',            etiket: 'Teras',            emoji: '🌅' },
+  { id: 'Bahçe',            etiket: 'Bahçe',            emoji: '🌿' },
+  { id: 'Gala Salonu',      etiket: 'Gala Salonu',      emoji: '✨' },
+  { id: 'Hibrit Uyumlu',    etiket: 'Hibrit Uyumlu',    emoji: '💻' },
+];
+
+const TEKNIK_FILTRELER = [
+  { id: 'Simultane Çeviri', etiket: 'Simultane Çeviri', emoji: '🗣' },
+  { id: 'LED Ekran',        etiket: 'LED Ekran',         emoji: '📺' },
+  { id: 'Hızlı WiFi',       etiket: 'Hızlı WiFi',        emoji: '📶' },
+  { id: 'Canlı Yayın',      etiket: 'Canlı Yayın',       emoji: '📡' },
+  { id: 'Projeksiyon',      etiket: 'Projeksiyon',        emoji: '🎥' },
+  { id: 'Ses Sistemi',      etiket: 'Ses Sistemi',        emoji: '🔊' },
 ];
 
 const ARAMA_ONERILERI = [
-  'İstanbul düğün', 'Ankara nişan', 'İzmir doğum günü',
-  'İstanbul kurumsal', 'Antalya düğün', 'Bodrum nişan',
-  'İstanbul mezuniyet', 'Ankara toplantı', 'İstanbul evlenme teklifi',
+  'İstanbul ürün lansmanı', 'Ankara konferans', 'İzmir team building',
+  'İstanbul genel kurul', 'Antalya bayi toplantısı', 'İstanbul VIP müşteri',
+  'İstanbul IPO roadshow', 'Ankara ödül töreni', 'İstanbul zirve',
+  'İzmir eğitim çalıştay', 'İstanbul gala gecesi', 'Ankara motivasyon toplantısı',
 ];
 
 // ── YARDIMCI FONKSİYONLAR ───────────────────────────────
 async function fotografYukle(setUrl, setYukleniyor) {
-  if (Platform.OS === 'web') {
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setYukleniyor(true);
-      try {
-        const dosyaAdi = `mekan_${Date.now()}.jpg`;
-        const response = await fetch(
-          `${SUPABASE_URL}/storage/v1/object/mekan-fotograflar/${dosyaAdi}`,
-          { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': file.type, 'x-upsert': 'true' }, body: file }
-        );
-        if (response.ok) {
-          setUrl(`${SUPABASE_URL}/storage/v1/object/public/mekan-fotograflar/${dosyaAdi}`);
-          alert('✅ Fotoğraf yüklendi!');
-        }
-      } catch (err) { alert('Hata: ' + err.message); }
-      setYukleniyor(false);
-    };
-    input.click();
+  if (Platform.OS !== 'web') {
+    alert('Fotoğraf yüklemek için URL yapıştırın veya web tarayıcısını kullanın.');
+    return;
   }
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Fotoğraf 5MB\'dan küçük olmalı!'); return; }
+    setYukleniyor(true);
+    try {
+      const dosyaAdi = `mekan_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      const response = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/mekan-fotograflar/${dosyaAdi}`,
+        { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': file.type, 'x-upsert': 'true' }, body: file }
+      );
+      if (response.ok) {
+        setUrl(`${SUPABASE_URL}/storage/v1/object/public/mekan-fotograflar/${dosyaAdi}`);
+        alert('✅ Fotoğraf yüklendi!');
+      } else {
+        const errText = await response.text();
+        alert('Yükleme hatası: ' + errText);
+      }
+    } catch (err) { alert('Hata: ' + err.message); }
+    setYukleniyor(false);
+  };
+  input.click();
 }
 
 function youtubeEmbedUrl(url) {
@@ -155,6 +205,70 @@ function formatTarih(tarih) {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+}
+
+// ── 6. SEO META TAG YÖNETİMİ ─────────────────────────────
+function seoGuncelle({ title, description, image } = {}) {
+  if (Platform.OS !== 'web') return;
+  const siteName = 'etkinlink';
+  const defaultTitle = 'etkinlink — Kurumsal etkinlikleriniz için doğru mekan';
+  const defaultDesc = 'Ürün lansmanı, konferans, team building, genel kurul ve daha fazlası için Türkiye\'nin seçkin kurumsal mekanlarını keşfet. Ücretsiz teklif al.';
+  const defaultImage = 'https://svaqquywnidqecbcwaqe.supabase.co/storage/v1/object/public/mekan-fotograflar/og-default.jpg';
+
+  const t = title ? `${title} | ${siteName}` : defaultTitle;
+  const d = description || defaultDesc;
+  const img = image || defaultImage;
+
+  document.title = t;
+
+  const setMeta = (sel, val) => {
+    let el = document.querySelector(sel);
+    if (!el) { el = document.createElement('meta'); const attr = sel.includes('property') ? sel.match(/"([^"]+)"/)[1] : sel.match(/"([^"]+)"/)[1]; el.setAttribute(sel.includes('property') ? 'property' : 'name', attr); document.head.appendChild(el); }
+    el.setAttribute('content', val);
+  };
+
+  setMeta('meta[name="description"]', d);
+  setMeta('meta[property="og:title"]', t);
+  setMeta('meta[property="og:description"]', d);
+  setMeta('meta[property="og:image"]', img);
+  setMeta('meta[property="og:type"]', 'website');
+  setMeta('meta[property="og:site_name"]', siteName);
+  setMeta('meta[name="twitter:card"]', 'summary_large_image');
+  setMeta('meta[name="twitter:title"]', t);
+  setMeta('meta[name="twitter:description"]', d);
+  setMeta('meta[name="twitter:image"]', img);
+}
+
+// ── LOGO BİLEŞENİ (Link/Zincir simgesi) ─────────────────
+function EtkinlinkLogo({ size = 36 }) {
+  const s = size;
+  const pad = Math.round(s * 0.18);
+  const r = Math.round(s * 0.22);
+  const strokeW = Math.max(2, Math.round(s * 0.08));
+  if (Platform.OS === 'web') {
+    return (
+      <div style={{
+        width: s, height: s,
+        background: C.midnight,
+        borderRadius: Math.round(s * 0.26),
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <svg width={s * 0.62} height={s * 0.62} viewBox="0 0 24 24" fill="none"
+          stroke={C.gold} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+      </div>
+    );
+  }
+  // Native fallback — Text tabanlı
+  return (
+    <View style={{ width: s, height: s, backgroundColor: C.midnight, borderRadius: Math.round(s * 0.26),
+      justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ color: C.gold, fontSize: Math.round(s * 0.45), fontWeight: '900' }}>🔗</Text>
+    </View>
+  );
 }
 
 // ── 1. KVKK ONAY KUTUSU BİLEŞENİ ────────────────────────
@@ -211,7 +325,7 @@ function GizlilikPolitikasi({ onKapat }) {
             },
             {
               baslik: '2. Toplanan Kişisel Veriler',
-              icerik: 'Platformumuzda teklif formu doldurduğunuzda şu bilgileri topluyoruz:\n\n• Ad ve soyadınız\n• Telefon numaranız\n• E-posta adresiniz (opsiyonel)\n• Etkinlik tarihi ve kişi sayısı bilgisi\n• İletişim notlarınız',
+              icerik: 'Platformumuzda teklif formu doldurduğunuzda şu bilgileri topluyoruz:\n\n• Ad ve soyadınız\n• Firma / Şirket adınız (opsiyonel)\n• Telefon numaranız\n• E-posta adresiniz (opsiyonel)\n• Etkinlik tarihi, türü ve katılımcı sayısı\n• Teknik gereksinimler ve özel istekler',
             },
             {
               baslik: '3. Verilerin İşlenme Amacı',
@@ -291,7 +405,7 @@ function HataSayfasi({ hata, onYeniden }) {
 }
 
 // ── ARAMA ÇUBUĞU ─────────────────────────────────────────
-function AramaComubugu({ arama, setArama }) {
+function AramaCubugu({ arama, setArama }) {
   const [odakta, setOdakta] = useState(false);
   const [oneriIndex, setOneriIndex] = useState(0);
 
@@ -352,7 +466,7 @@ function AramaComubugu({ arama, setArama }) {
 
 // ── İLETİŞİM BUTONU ──────────────────────────────────────
 function IletisimButonu({ mekan, kullanici, onFormAc, style }) {
-  const isRomantik = mekan.alt_kategori?.includes('evlenme_teklifi');
+  const isRomantik = false; // Kurumsal platform
   const tur = mekan.iletisim_turu || 'form';
 
   function iletisimKur() {
@@ -360,7 +474,7 @@ function IletisimButonu({ mekan, kullanici, onFormAc, style }) {
     const mekanAdi = mekan.isim;
     if (tur === 'whatsapp' && numara) {
       const mesaj = mekan.whatsapp_mesaj_sablonu ||
-        `Merhaba! etkinlink üzerinden ${mekanAdi} için fiyat teklifi almak istiyorum.`;
+        `Merhaba! etkinlink üzerinden ${mekanAdi} için kurumsal etkinlik teklifi almak istiyorum.`;
       const url = `https://wa.me/90${numara}?text=${encodeURIComponent(mesaj)}`;
       if (Platform.OS === 'web') window.open(url, '_blank');
       else Linking.openURL(url);
@@ -377,8 +491,7 @@ function IletisimButonu({ mekan, kullanici, onFormAc, style }) {
     }
   }
 
-  const bgRenk = isRomantik ? C.romantic
-    : tur === 'whatsapp' ? C.whatsapp
+  const bgRenk = tur === 'whatsapp' ? C.whatsapp
     : tur === 'telefon' ? C.midnight
     : tur === 'email' ? C.midnightSoft
     : C.midnight;
@@ -386,8 +499,7 @@ function IletisimButonu({ mekan, kullanici, onFormAc, style }) {
   const butonYazi = tur === 'whatsapp' ? '💬 WhatsApp\'tan Yaz'
     : tur === 'telefon' ? '📞 Hemen Ara'
     : tur === 'email' ? '📧 E-posta Gönder'
-    : isRomantik ? '💝 Özel Paket'
-    : '💬 Fiyat Teklifi Al';
+    : '📋 Teklif Talebi Al';
 
   return (
     <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: bgRenk }, style]} onPress={iletisimKur}>
@@ -397,95 +509,380 @@ function IletisimButonu({ mekan, kullanici, onFormAc, style }) {
 }
 
 // ── KULLANICI GİRİŞ/KAYIT ────────────────────────────────
-function KullaniciGirisEkrani({ onGiris, onKapat }) {
+function KullaniciGirisEkrani({ onGiris, onKapat, onGizlilikAc }) {
   const [mod, setMod] = useState('giris');
   const [adSoyad, setAdSoyad] = useState('');
   const [telefon, setTelefon] = useState('');
   const [email, setEmail] = useState('');
   const [sifre, setSifre] = useState('');
+  const [sifreGoster, setSifreGoster] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState('');
+  const [kvkkOnay, setKvkkOnay] = useState(false);
+  const [kvkkHata, setKvkkHata] = useState(false);
+  const [sifreSifirlamaModu, setSifreSifirlamaModu] = useState(false);
+  const [sifreSifirlamaGonderildi, setSifreSifirlamaGonderildi] = useState(false);
   const slideAnim = useRef(new Animated.Value(400)).current;
 
   useEffect(() => {
     Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }).start();
   }, []);
 
+  function temizTelefon(tel) {
+    return tel.replace(/\s|-|\(|\)/g, '').trim();
+  }
+
   async function girisYap() {
-    if (!telefon || !sifre) { setHata('Telefon ve şifre zorunlu!'); return; }
+    if (!email.trim()) { setHata('E-posta zorunlu!'); return; }
+    if (!sifre) { setHata('Şifre zorunlu!'); return; }
     setYukleniyor(true); setHata('');
     try {
-      const data = await apiFetch(`kullanicilar?telefon=eq.${encodeURIComponent(telefon)}&select=*`);
-      if (!Array.isArray(data) || data.length === 0) { setHata('Bu telefon ile kayıtlı kullanıcı bulunamadı!'); setYukleniyor(false); return; }
-      if (data[0].sifre !== sifre) { setHata('Şifre hatalı!'); setYukleniyor(false); return; }
-      onGiris(data[0]);
-    } catch (e) { setHata('Giriş hatası: ' + e.message); }
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: sifre,
+      });
+      if (authErr) {
+        if (authErr.message.includes('Invalid login')) {
+          setHata('E-posta veya şifre hatalı.');
+        } else if (authErr.message.includes('Email not confirmed')) {
+          setHata('E-postanızı doğrulamanız gerekiyor. Gelen kutunuzu kontrol edin.');
+        } else {
+          setHata('Giriş hatası: ' + authErr.message);
+        }
+        setYukleniyor(false); return;
+      }
+      // auth_id ile kullanicilar tablosundan profil çek
+      const profil = await apiFetch(`kullanicilar?auth_id=eq.${authData.user.id}&select=*`);
+      if (Array.isArray(profil) && profil[0]) {
+        onGiris(profil[0]);
+      } else {
+        // Profil yoksa oluştur (ilk giriş senaryosu)
+        const { ok, data } = await apiPostSafe('kullanicilar', {
+          auth_id: authData.user.id,
+          ad_soyad: authData.user.user_metadata?.ad_soyad || email.split('@')[0],
+          email: email.trim().toLowerCase(),
+          telefon: null,
+          telefon_dogrulandi: false,
+        });
+        if (ok && data) onGiris(data);
+        else onGiris({ id: authData.user.id, auth_id: authData.user.id, ad_soyad: email.split('@')[0], email: email.trim().toLowerCase() });
+      }
+    } catch (e) {
+      setHata('Bağlantı hatası: ' + e.message);
+    }
     setYukleniyor(false);
   }
 
   async function kayitOl() {
-    if (!adSoyad || !telefon || !sifre) { setHata('Ad soyad, telefon ve şifre zorunlu!'); return; }
-    if (sifre.length < 6) { setHata('Şifre en az 6 karakter olmalı!'); return; }
+    if (!adSoyad.trim()) { setHata('Ad soyad zorunlu!'); return; }
+    if (!email.trim() || !email.includes('@')) { setHata('Geçerli bir e-posta adresi girin.'); return; }
+    if (!sifre || sifre.length < 6) { setHata('Şifre en az 6 karakter olmalı!'); return; }
+    if (!kvkkOnay) { setKvkkHata(true); return; }
+    setKvkkHata(false);
     setYukleniyor(true); setHata('');
     try {
-      const mevcutKullanici = await apiFetch(`kullanicilar?telefon=eq.${encodeURIComponent(telefon)}&select=id`);
-      if (Array.isArray(mevcutKullanici) && mevcutKullanici.length > 0) {
-        setHata('Bu telefon zaten kayıtlı! Giriş yapın.'); setYukleniyor(false); return;
+      const tel = temizTelefon(telefon);
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password: sifre,
+        options: { data: { ad_soyad: adSoyad.trim() } },
+      });
+      if (authErr) {
+        if (
+          authErr.message.includes('already registered') ||
+          authErr.message.includes('User already registered')
+        ) {
+          // Kayıtlı ama doğrulanmamış olabilir — giriş yapmayı dene
+          const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
+            password: sifre,
+          });
+          if (!loginErr && loginData?.user) {
+            // Giriş başarılı — profil çek veya oluştur
+            const profil = await apiFetch(`kullanicilar?auth_id=eq.${loginData.user.id}&select=*`);
+            if (Array.isArray(profil) && profil[0]) {
+              onGiris(profil[0]); setYukleniyor(false); return;
+            }
+            // Profil yoksa ekle
+            const { ok, data: pd } = await apiPostSafe('kullanicilar', {
+              auth_id: loginData.user.id,
+              ad_soyad: adSoyad.trim(),
+              email: email.trim().toLowerCase(),
+              telefon: tel || null,
+              telefon_dogrulandi: false,
+            });
+            onGiris(pd || { id: loginData.user.id, auth_id: loginData.user.id, ad_soyad: adSoyad.trim(), email: email.trim().toLowerCase() });
+            setYukleniyor(false); return;
+          } else if (loginErr?.message?.includes('Email not confirmed')) {
+            setHata('Bu e-posta kayıtlı ama henüz doğrulanmamış. Gelen kutunuzu kontrol edin veya farklı bir e-posta deneyin.');
+          } else {
+            setHata('Bu e-posta zaten kayıtlı. Giriş yapmayı deneyin.');
+          }
+        } else {
+          setHata('Kayıt hatası: ' + authErr.message);
+        }
+        setYukleniyor(false); return;
       }
-      const r = await apiPost('kullanicilar', { ad_soyad: adSoyad, telefon, email: email || null, sifre });
-      const yeniKullanici = await r.json();
-      if (Array.isArray(yeniKullanici) && yeniKullanici[0]) {
-        onGiris(yeniKullanici[0]);
+      if (!authData.user) {
+        setHata('Kayıt oluşturulamadı. Lütfen tekrar deneyin.');
+        setYukleniyor(false); return;
+      }
+      // kullanicilar tablosuna profil ekle
+      const { ok, error: profilErr, data: profilData } = await apiPostSafe('kullanicilar', {
+        auth_id: authData.user.id,
+        ad_soyad: adSoyad.trim(),
+        email: email.trim().toLowerCase(),
+        telefon: tel || null,
+        telefon_dogrulandi: false,
+      });
+      if (!ok) {
+        // Profil eklenemese bile auth başarılı — devam et
+        console.log('Profil kayıt hatası:', profilErr);
+      }
+      // E-posta doğrulama gerekiyor mu kontrol et
+      if (authData.session) {
+        // Doğrulama gerekmedi, direkt giriş
+        const kullanici = profilData || {
+          id: authData.user.id, auth_id: authData.user.id,
+          ad_soyad: adSoyad.trim(), email: email.trim().toLowerCase(), telefon: tel || null,
+        };
+        onGiris(kullanici);
       } else {
-        setHata('Kayıt başarısız, lütfen tekrar deneyin.');
+        // E-posta doğrulama gerekiyor
+        setHata('');
+        setYukleniyor(false);
+        setMod('dogrulama');
       }
-    } catch (e) { setHata('Kayıt hatası: ' + e.message); }
+    } catch (e) {
+      setHata('Bağlantı hatası: ' + e.message);
+    }
     setYukleniyor(false);
+  }
+
+  async function sifreSifirla() {
+    if (!email.trim()) { setHata('E-posta adresinizi girin.'); return; }
+    setYukleniyor(true); setHata('');
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: Platform.OS === 'web' ? window.location.origin : 'https://etkinlink.com',
+    });
+    setYukleniyor(false);
+    if (error) { setHata('Hata: ' + error.message); return; }
+    setSifreSifirlamaGonderildi(true);
+  }
+
+  // Şifre sıfırlama ekranı
+  if (sifreSifirlamaModu) {
+    return (
+      <View style={styles.modalOverlay}>
+        <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }], maxHeight: '90%' }]}>
+          <View style={[styles.modalBar, { backgroundColor: C.gold }]} />
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <TouchableOpacity onPress={() => { setSifreSifirlamaModu(false); setSifreSifirlamaGonderildi(false); setHata(''); }}
+              style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ fontSize: 16, color: C.midnight, marginRight: 6 }}>←</Text>
+              <Text style={{ fontSize: 13, color: C.midnight, fontWeight: '600' }}>Geri Dön</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalBaslik, { textAlign: 'center' }]}>🔑 Şifre Sıfırla</Text>
+            {sifreSifirlamaGonderildi ? (
+              <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                <Text style={{ fontSize: 40, marginBottom: 16 }}>📧</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: C.success, marginBottom: 8 }}>E-posta Gönderildi!</Text>
+                <Text style={{ color: C.textMid, textAlign: 'center', lineHeight: 22, fontSize: 14, marginBottom: 24 }}>
+                  <Text style={{ fontWeight: '700' }}>{email}</Text> adresine şifre sıfırlama bağlantısı gönderdik. Gelen kutunuzu ve spam klasörünüzü kontrol edin.
+                </Text>
+                <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight, paddingHorizontal: 32 }]}
+                  onPress={() => { setSifreSifirlamaModu(false); setSifreSifirlamaGonderildi(false); }}>
+                  <Text style={styles.teklifBtnText}>Giriş Sayfasına Dön</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <Text style={{ color: C.textMid, textAlign: 'center', marginBottom: 20, fontSize: 14, lineHeight: 20 }}>
+                  Kayıtlı e-posta adresinizi girin. Şifre sıfırlama bağlantısı göndereceğiz.
+                </Text>
+                <TextInput style={styles.formInput} placeholder="E-posta *" placeholderTextColor={C.textSoft}
+                  value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+                {hata ? <Text style={{ color: C.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{hata}</Text> : null}
+                <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]} onPress={sifreSifirla} disabled={yukleniyor}>
+                  <Text style={styles.teklifBtnText}>{yukleniyor ? 'Gönderiliyor...' : '📧 Sıfırlama Bağlantısı Gönder'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ color: C.textSoft, fontSize: 14 }}>Kapat</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </Animated.View>
+      </View>
+    );
+  }
+
+  // E-posta doğrulama bekleniyor ekranı
+  if (mod === 'dogrulama') {
+    return (
+      <View style={styles.modalOverlay}>
+        <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }] }]}>
+          <View style={[styles.modalBar, { backgroundColor: C.gold }]} />
+          <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+            <Text style={{ fontSize: 48, marginBottom: 16 }}>📧</Text>
+            <Text style={[styles.modalBaslik, { textAlign: 'center' }]}>E-postanızı Doğrulayın</Text>
+            <Text style={{ color: C.textMid, textAlign: 'center', lineHeight: 22, fontSize: 14, marginBottom: 8 }}>
+              <Text style={{ fontWeight: '700' }}>{email}</Text> adresine doğrulama e-postası gönderdik.
+            </Text>
+            <Text style={{ color: C.textSoft, textAlign: 'center', fontSize: 13, marginBottom: 24, paddingHorizontal: 8 }}>
+              E-postayı onayladıktan sonra aşağıdan giriş yapabilirsiniz.{'\n'}
+              Spam/junk klasörünü de kontrol edin.
+            </Text>
+            <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight, paddingHorizontal: 32, marginBottom: 12 }]}
+              onPress={() => setMod('giris')}>
+              <Text style={styles.teklifBtnText}>🔐 Giriş Yap</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={async () => {
+                const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
+                alert(error ? 'Hata: ' + error.message : '✅ Doğrulama e-postası tekrar gönderildi!');
+              }}
+              style={{ paddingVertical: 10 }}>
+              <Text style={{ color: C.gold, fontSize: 13, fontWeight: '600' }}>E-postayı tekrar gönder →</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={onKapat} style={{ marginTop: 4, alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ color: C.textSoft, fontSize: 14 }}>Kapat</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    );
   }
 
   return (
     <View style={styles.modalOverlay}>
-      <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }], maxHeight: '90%' }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }], maxHeight: '94%' }]}>
         <View style={[styles.modalBar, { backgroundColor: C.gold }]} />
-        <Text style={styles.modalBaslik}>{mod === 'giris' ? '👤 Giriş Yap' : '👤 Kayıt Ol'}</Text>
-        <Text style={styles.modalAlt}>Teklif almak ve başvurularınızı takip etmek için</Text>
-        <View style={{ flexDirection: 'row', backgroundColor: C.border, borderRadius: 12, padding: 3, marginBottom: 20 }}>
-          {[{ id: 'giris', etiket: 'Giriş Yap' }, { id: 'kayit', etiket: 'Kayıt Ol' }].map(t => (
-            <TouchableOpacity key={t.id}
-              style={[{ flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' }, mod === t.id && { backgroundColor: C.white }]}
-              onPress={() => { setMod(t.id); setHata(''); }}>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: mod === t.id ? C.midnight : C.textSoft }}>{t.etiket}</Text>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <Text style={styles.modalBaslik}>{mod === 'giris' ? '👤 Giriş Yap' : '👤 Kayıt Ol'}</Text>
+          <Text style={styles.modalAlt}>Teklif almak ve başvurularınızı takip etmek için</Text>
+
+          {/* Tab */}
+          <View style={{ flexDirection: 'row', backgroundColor: C.border, borderRadius: 12, padding: 3, marginBottom: 20 }}>
+            {[{ id: 'giris', etiket: 'Giriş Yap' }, { id: 'kayit', etiket: 'Kayıt Ol' }].map(t => (
+              <TouchableOpacity key={t.id}
+                style={[{ flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' }, mod === t.id && { backgroundColor: C.white }]}
+                onPress={() => { setMod(t.id); setHata(''); setKvkkHata(false); }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: mod === t.id ? C.midnight : C.textSoft }}>{t.etiket}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Kayıt: ek alanlar */}
+          {mod === 'kayit' && (
+            <>
+              <TextInput style={styles.formInput} placeholder="Ad Soyad *" placeholderTextColor={C.textSoft}
+                value={adSoyad} onChangeText={setAdSoyad} />
+              <TextInput style={styles.formInput} placeholder="Telefon (opsiyonel)" placeholderTextColor={C.textSoft}
+                value={telefon} onChangeText={setTelefon} keyboardType="phone-pad" />
+            </>
+          )}
+
+          {/* Ortak: e-posta */}
+          <TextInput style={styles.formInput} placeholder="E-posta *" placeholderTextColor={C.textSoft}
+            value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+
+          {/* Ortak: şifre */}
+          <View style={{ position: 'relative', marginBottom: 0 }}>
+            <TextInput style={[styles.formInput, { paddingRight: 48 }]}
+              placeholder={mod === 'giris' ? 'Şifre *' : 'Şifre * (en az 6 karakter)'}
+              placeholderTextColor={C.textSoft}
+              value={sifre} onChangeText={setSifre}
+              secureTextEntry={!sifreGoster} />
+            <TouchableOpacity
+              onPress={() => setSifreGoster(g => !g)}
+              style={{ position: 'absolute', right: 14, top: 14 }}>
+              <Text style={{ fontSize: 18 }}>{sifreGoster ? '🙈' : '👁️'}</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-        {mod === 'kayit' && (
-          <>
-            <TextInput style={styles.formInput} placeholder="Ad Soyad *" placeholderTextColor={C.textSoft} value={adSoyad} onChangeText={setAdSoyad} />
-            <TextInput style={styles.formInput} placeholder="E-posta (opsiyonel)" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-          </>
-        )}
-        <TextInput style={styles.formInput} placeholder="Telefon * (05XX...)" placeholderTextColor={C.textSoft} value={telefon} onChangeText={setTelefon} keyboardType="phone-pad" />
-        <TextInput style={styles.formInput} placeholder="Şifre * (en az 6 karakter)" placeholderTextColor={C.textSoft} value={sifre} onChangeText={setSifre} secureTextEntry />
-        {hata ? <Text style={{ color: C.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{hata}</Text> : null}
-        <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]}
-          onPress={mod === 'giris' ? girisYap : kayitOl} disabled={yukleniyor}>
-          <Text style={styles.teklifBtnText}>{yukleniyor ? 'Lütfen bekleyin...' : mod === 'giris' ? 'Giriş Yap' : 'Kayıt Ol'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center' }}>
-          <Text style={{ color: C.textSoft, fontSize: 14 }}>Vazgeç</Text>
-        </TouchableOpacity>
+          </View>
+
+          {/* Şifremi unuttum */}
+          {mod === 'giris' && (
+            <TouchableOpacity
+              onPress={() => { setSifreSifirlamaModu(true); setHata(''); }}
+              style={{ alignSelf: 'flex-end', marginBottom: 16, marginTop: 6 }}>
+              <Text style={{ color: C.gold, fontSize: 13, fontWeight: '600' }}>Şifremi unuttum →</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Hata */}
+          {hata ? (
+            <View style={{ backgroundColor: C.dangerSoft, borderRadius: 10, padding: 12, marginBottom: 12, marginTop: 8, borderWidth: 1, borderColor: C.danger + '40' }}>
+              <Text style={{ color: C.danger, fontSize: 13, textAlign: 'center' }}>{hata}</Text>
+            </View>
+          ) : null}
+
+          {/* KVKK */}
+          {mod === 'kayit' && (
+            <>
+              <KVKKOnayKutusu
+                onayVerildi={kvkkOnay}
+                setOnayVerildi={(val) => { setKvkkOnay(val); if (val) setKvkkHata(false); }}
+                onGizlilikAc={onGizlilikAc || (() => {})}
+              />
+              {kvkkHata && (
+                <Text style={{ color: C.danger, fontSize: 12, marginBottom: 10, marginTop: -4 }}>
+                  ⚠️ Devam etmek için gizlilik politikasını onaylamanız gerekiyor.
+                </Text>
+              )}
+            </>
+          )}
+
+          <TouchableOpacity
+            style={[styles.teklifBtn, { backgroundColor: C.midnight, marginTop: 4 }]}
+            onPress={mod === 'giris' ? girisYap : kayitOl}
+            disabled={yukleniyor}>
+            <Text style={styles.teklifBtnText}>
+              {yukleniyor ? 'Lütfen bekleyin...' : mod === 'giris' ? '🔐 Giriş Yap' : '✓ Kayıt Ol'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center', marginBottom: 20 }}>
+            <Text style={{ color: C.textSoft, fontSize: 14 }}>Vazgeç</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </Animated.View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
+
 // ── KULLANICI PANELİ ──────────────────────────────────────
-function KullaniciPaneli({ kullanici, onCikis }) {
+function KullaniciPaneli({ kullanici, onKapat, onCikis, onGizlilikAc, favorilerDis, karsilastirmaListesiDis, onFavoriKaldir, onKarsilastirmaGuncelle }) {
   const [basvurular, setBasvurular] = useState([]);
+  const [favoriMekanlar, setFavoriMekanlar] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [yenileniyor, setYenileniyor] = useState(false);
+  const [aktifTab, setAktifTab] = useState('basvurular');
 
-  useEffect(() => { veriGetir(); }, []);
+  // App'taki global state'i doğrudan kullanalım (prop olarak geliyor)
+  const favoriler = favorilerDis || [];
+  const karsilastirmaListesi = karsilastirmaListesiDis || [];
+
+  useEffect(() => {
+    veriGetir();
+  }, []);
+
+  useEffect(() => {
+    if (favoriler.length > 0) {
+      favoriMekanGetir();
+    } else {
+      setFavoriMekanlar([]);
+    }
+  }, [favoriler]);
+
+  async function favoriMekanGetir() {
+    if (favoriler.length === 0) return;
+    const idler = favoriler.join(',');
+    const data = await apiFetch(`mekanlar?id=in.(${idler})&select=*`);
+    setFavoriMekanlar(Array.isArray(data) ? data : []);
+  }
 
   async function veriGetir(yenile = false) {
     if (yenile) setYenileniyor(true); else setYukleniyor(true);
@@ -495,8 +892,110 @@ function KullaniciPaneli({ kullanici, onCikis }) {
     setYenileniyor(false);
   }
 
+  function favoriKaldir(mekanId) {
+    // App'taki favoriToggle'ı çağır — App state'ini günceller ve localStorage'a yazar
+    if (onFavoriKaldir) onFavoriKaldir(mekanId);
+  }
+
+  function karsilastirmadanKaldir(mekan) {
+    const yeni = karsilastirmaListesi.filter(m => m.id !== mekan.id);
+    if (onKarsilastirmaGuncelle) {
+      onKarsilastirmaGuncelle(yeni);
+      if (Platform.OS === 'web') {
+        try {
+          const key = `etkinlink_karsilastirma_${kullanici.id}`;
+          localStorage.setItem(key, JSON.stringify(yeni));
+        } catch(e) {}
+      }
+    }
+  }
+
+  function karsilastirmaListesiTemizle() {
+    if (onKarsilastirmaGuncelle) {
+      onKarsilastirmaGuncelle([]);
+      if (Platform.OS === 'web') {
+        try { localStorage.removeItem(`etkinlink_karsilastirma_${kullanici.id}`); } catch(e) {}
+      }
+    }
+  }
+
   const durumRenk = (d) => d === 'tamamlandı' ? C.success : d === 'aranıyor' ? C.gold : C.textSoft;
   const durumEmoji = (d) => d === 'tamamlandı' ? '✅' : d === 'aranıyor' ? '📞' : '⏳';
+
+  // Karşılaştırma tablosu bileşeni
+  const KarsilastirmaTablosu = () => {
+    if (karsilastirmaListesi.length === 0) {
+      return (
+        <View style={styles.bosEkran}>
+          <Text style={styles.bosEkranEmoji}>⚖️</Text>
+          <Text style={styles.bosEkranText}>Karşılaştırma listesi boş.</Text>
+          <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 8, textAlign: 'center' }}>
+            Mekan kartlarındaki "Karşılaştırmaya Ekle" butonunu kullanın.
+          </Text>
+        </View>
+      );
+    }
+    const alanlar = [
+      { key: 'kapasite',    label: '👥 Kapasite', fmt: v => v ? `${v} kişi` : '—' },
+      { key: 'fiyat_aralik',label: '💰 Fiyat',    fmt: v => v || '—' },
+      { key: 'puan',        label: '★ Puan',       fmt: v => v ? String(v) : '—' },
+      { key: 'sehir',       label: '📍 Şehir',     fmt: v => v || '—' },
+    ];
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={{ padding: 4 }}>
+          {/* Mekan başlıkları */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+            <View style={{ width: 100 }} />
+            {karsilastirmaListesi.map((m, i) => (
+              <View key={i} style={{ width: 130, alignItems: 'center' }}>
+                <Image source={{ uri: m.fotograf_url }} style={{ width: 130, height: 80, borderRadius: 12 }} resizeMode="cover" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: C.text, textAlign: 'center', marginTop: 6, lineHeight: 16 }} numberOfLines={2}>{m.isim}</Text>
+                <TouchableOpacity
+                  onPress={() => karsilastirmadanKaldir(m)}
+                  style={{ marginTop: 6, backgroundColor: C.dangerSoft, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <Text style={{ fontSize: 11, color: C.danger, fontWeight: '600' }}>✕ Çıkar</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+          {/* Karşılaştırma satırları */}
+          {alanlar.map((alan, ai) => (
+            <View key={ai} style={{ flexDirection: 'row', gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' }}>
+              <Text style={{ width: 100, fontSize: 12, color: C.textSoft, fontWeight: '600' }}>{alan.label}</Text>
+              {karsilastirmaListesi.map((m, mi) => {
+                const isNum = alan.key === 'kapasite' || alan.key === 'puan';
+                const best = isNum ? Math.max(...karsilastirmaListesi.map(x => Number(x[alan.key]) || 0)) : null;
+                const isBest = isNum && Number(m[alan.key]) === best && best > 0;
+                return (
+                  <View key={mi} style={{ width: 130, alignItems: 'center', backgroundColor: isBest ? C.gold + '15' : C.bg, borderRadius: 8, padding: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: isBest ? '700' : '500', color: isBest ? C.gold : C.text, textAlign: 'center' }}>
+                      {alan.fmt(m[alan.key])}
+                    </Text>
+                    {isBest && <Text style={{ fontSize: 9, color: C.gold, fontWeight: '700', marginTop: 2 }}>EN İYİ ✓</Text>}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+          {/* Özellikler satırı */}
+          <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'flex-start' }}>
+            <Text style={{ width: 100, fontSize: 12, color: C.textSoft, fontWeight: '600' }}>🏷️ Özellikler</Text>
+            {karsilastirmaListesi.map((m, mi) => (
+              <View key={mi} style={{ width: 130 }}>
+                {(m.fiziksel_ozellikler || []).slice(0, 3).map((o, oi) => (
+                  <View key={oi} style={{ backgroundColor: C.goldSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 4, borderWidth: 1, borderColor: C.goldLight }}>
+                    <Text style={{ fontSize: 10, color: C.gold, fontWeight: '600' }}>{o}</Text>
+                  </View>
+                ))}
+                {(m.fiziksel_ozellikler || []).length === 0 && <Text style={{ fontSize: 12, color: C.textSoft }}>—</Text>}
+              </View>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg }]}>
@@ -505,48 +1004,143 @@ function KullaniciPaneli({ kullanici, onCikis }) {
           <Text style={[styles.logo, { color: C.midnight, fontSize: 20 }]}>Merhaba 👋</Text>
           <Text style={{ color: C.textSoft, fontSize: 12 }}>{kullanici.ad_soyad}</Text>
         </View>
-        <TouchableOpacity onPress={onCikis} style={[styles.pill, { backgroundColor: C.bg }]}>
-          <Text style={{ color: C.textMid, fontSize: 13 }}>← Ana Sayfa</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity onPress={onKapat} style={[styles.pill, { backgroundColor: C.bg }]}>
+            <Text style={{ color: C.textMid, fontSize: 13 }}>← Ana Sayfa</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onCikis} style={[styles.pill, { backgroundColor: C.dangerSoft, borderColor: C.danger + '40' }]}>
+            <Text style={{ color: C.danger, fontSize: 13, fontWeight: '600' }}>Çıkış</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Tab bar */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 52 }}>
+        <View style={[styles.tabRow, { paddingHorizontal: 16 }]}>
+          {[
+            { id: 'basvurular', etiket: '📋 Teklif Taleplerim' },
+            { id: 'favoriler', etiket: `❤️ Beğendiklerim${favoriler.length > 0 ? ` (${favoriler.length})` : ''}` },
+            { id: 'karsilastirma', etiket: `⚖️ Karşılaştır${karsilastirmaListesi.length > 0 ? ` (${karsilastirmaListesi.length})` : ''}` },
+          ].map(t => (
+            <TouchableOpacity key={t.id}
+              style={[styles.tabBtn, { marginRight: 8, paddingHorizontal: 14 }, aktifTab === t.id && { backgroundColor: C.midnight, borderColor: C.midnight }]}
+              onPress={() => setAktifTab(t.id)}>
+              <Text style={[styles.tabBtnText, aktifTab === t.id && { color: C.white }]}>{t.etiket}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={() => veriGetir(true)} tintColor={C.midnight} />}
       >
-        <View style={{ padding: 16 }}>
-          <Text style={[styles.formBaslik, { fontSize: 18, marginBottom: 16 }]}>Başvurularım</Text>
-          {yukleniyor
-            ? <ActivityIndicator size="large" color={C.midnight} style={{ marginTop: 40 }} />
-            : basvurular.length === 0
-              ? (
-                <View style={styles.bosEkran}>
-                  <Text style={styles.bosEkranEmoji}>📋</Text>
-                  <Text style={styles.bosEkranText}>Henüz başvurunuz yok.</Text>
-                  <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 8, textAlign: 'center' }}>
-                    Mekan detay sayfasından teklif alabilirsiniz.
-                  </Text>
-                </View>
-              )
-              : basvurular.map(b => (
-                <View key={b.id} style={styles.adminKart}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.adminKartIsim}>{b.mekan_isim}</Text>
-                    {b.kisi_sayisi ? <Text style={styles.adminKartDetay}>👥 {b.kisi_sayisi} kişi</Text> : null}
-                    {b.etkinlik_tarihi ? <Text style={styles.adminKartDetay}>📅 {b.etkinlik_tarihi}</Text> : null}
-                    {b.alt_kategori ? <Text style={styles.adminKartDetay}>🎉 {b.alt_kategori}</Text> : null}
-                    {b.notlar ? <Text style={styles.adminKartDetay}>💬 {b.notlar}</Text> : null}
-                    <Text style={styles.adminKartTarih}>{formatTarih(b.created_at)}</Text>
-                    <View style={{ marginTop: 6 }}>
-                      <Text style={{ fontSize: 12, color: durumRenk(b.durum), fontWeight: '600' }}>
-                        {durumEmoji(b.durum)} {b.durum === 'tamamlandı' ? 'Tamamlandı' : b.durum === 'aranıyor' ? 'Aranıyor' : 'Bekliyor'}
-                      </Text>
+        {/* BAŞVURULARIM */}
+        {aktifTab === 'basvurular' && (
+          <View style={{ padding: 16 }}>
+            {yukleniyor
+              ? <ActivityIndicator size="large" color={C.midnight} style={{ marginTop: 40 }} />
+              : basvurular.length === 0
+                ? (
+                  <View style={styles.bosEkran}>
+                    <Text style={styles.bosEkranEmoji}>📋</Text>
+                    <Text style={styles.bosEkranText}>Henüz teklif talebiniz yok.</Text>
+                    <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 8, textAlign: 'center' }}>
+                      Mekan detay sayfasından teklif alabilirsiniz.
+                    </Text>
+                  </View>
+                )
+                : basvurular.map(b => (
+                  <View key={b.id} style={[styles.adminKart, { borderLeftWidth: 3, borderLeftColor: durumRenk(b.durum) }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.adminKartIsim}>{b.mekan_isim}</Text>
+                      {b.kisi_sayisi ? <Text style={styles.adminKartDetay}>👥 {b.kisi_sayisi} katılımcı</Text> : null}
+                      {b.etkinlik_tarihi ? <Text style={styles.adminKartDetay}>📅 {b.etkinlik_tarihi}</Text> : null}
+                      {b.alt_kategori ? <Text style={styles.adminKartDetay}>🏢 {b.alt_kategori}</Text> : null}
+                      {b.notlar ? <Text style={styles.adminKartDetay}>💬 {b.notlar}</Text> : null}
+                      <Text style={styles.adminKartTarih}>{formatTarih(b.created_at)}</Text>
+                      <View style={{ marginTop: 6 }}>
+                        <Text style={{ fontSize: 12, color: durumRenk(b.durum), fontWeight: '600' }}>
+                          {durumEmoji(b.durum)} {b.durum === 'tamamlandı' ? 'Tamamlandı' : b.durum === 'aranıyor' ? 'Aranıyor' : 'Bekliyor'}
+                        </Text>
+                      </View>
                     </View>
+                  </View>
+                ))
+            }
+          </View>
+        )}
+
+        {/* BEĞENDİKLERİM */}
+        {aktifTab === 'favoriler' && (
+          <View style={{ padding: 16 }}>
+            {favoriMekanlar.length === 0 ? (
+              <View style={styles.bosEkran}>
+                <Text style={styles.bosEkranEmoji}>❤️</Text>
+                <Text style={styles.bosEkranText}>Henüz beğenilen mekan yok.</Text>
+                <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 8, textAlign: 'center' }}>
+                  Mekan kartlarındaki ♡ butonuna tıklayarak mekanları beğenebilirsiniz.
+                </Text>
+              </View>
+            ) : (
+              favoriMekanlar.map(m => (
+                <View key={m.id} style={[styles.adminKart, { flexDirection: 'column', padding: 0, overflow: 'hidden' }]}>
+                  <Image source={{ uri: m.fotograf_url }} style={{ width: '100%', height: 140, borderRadius: 0 }} resizeMode="cover" />
+                  <View style={{ padding: 14 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.adminKartIsim}>{m.isim}</Text>
+                        <Text style={styles.adminKartDetay}>📍 {m.sehir} · 👥 {m.kapasite} kişi</Text>
+                        {m.fiyat_aralik ? <Text style={[styles.adminKartDetay, { color: C.gold, fontWeight: '700' }]}>💰 {m.fiyat_aralik}</Text> : null}
+                        <Text style={{ color: C.gold, fontWeight: '600', fontSize: 12, marginTop: 2 }}>★ {m.puan}</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => favoriKaldir(m.id)}
+                        style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF0F0', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFCCCC' }}>
+                        <Text style={{ fontSize: 18, color: '#FF6B6B' }}>♥</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {(m.fiziksel_ozellikler || []).length > 0 && (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                        {m.fiziksel_ozellikler.slice(0, 4).map((o, i) => (
+                          <View key={i} style={{ backgroundColor: C.goldSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: C.goldLight }}>
+                            <Text style={{ fontSize: 11, color: C.gold, fontWeight: '600' }}>{o}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 </View>
               ))
-          }
-        </View>
+            )}
+          </View>
+        )}
+
+        {/* KARŞILAŞTIRMA */}
+        {aktifTab === 'karsilastirma' && (
+          <View style={{ padding: 16 }}>
+            {karsilastirmaListesi.length > 1 && (
+              <View style={{ backgroundColor: C.goldSoft, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.goldLight }}>
+                <Text style={{ color: C.gold, fontWeight: '700', fontSize: 13 }}>
+                  ⚖️ {karsilastirmaListesi.length} mekan karşılaştırılıyor
+                </Text>
+                <Text style={{ color: C.textMid, fontSize: 12, marginTop: 4 }}>
+                  En iyi değerler altın rengiyle vurgulanmıştır.
+                </Text>
+              </View>
+            )}
+            <KarsilastirmaTablosu />
+            {karsilastirmaListesi.length > 0 && (
+              <TouchableOpacity
+                onPress={karsilastirmaListesiTemizle}
+                style={{ marginTop: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' }}>
+                <Text style={{ color: C.textMid, fontSize: 13, fontWeight: '600' }}>🗑️ Listeyi Temizle</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
@@ -668,7 +1262,7 @@ function SahipGirisEkrani({ onGiris, onKapat }) {
       </TouchableOpacity>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8 }}>
-          <Image source={require('./assets/logo.png')} style={{ width: 160, height: 44, alignSelf: 'center', marginBottom: 8 }} resizeMode="contain" />
+          <Text style={[styles.logoText, { textAlign: 'center', fontSize: 28, color: C.midnight, marginBottom: 4 }]}>etkinlink</Text>
           <Text style={{ color: C.textSoft, textAlign: 'center', marginBottom: 32, fontSize: 14 }}>
             {mod === 'giris' ? 'Mekan Sahibi Girişi' : 'Mekan Sahibi Kaydı'}
           </Text>
@@ -709,7 +1303,7 @@ function SahipGirisEkrani({ onGiris, onKapat }) {
           {mod === 'kayit' && (
             <View style={{ backgroundColor: C.goldSoft, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.goldLight }}>
               <Text style={{ color: C.gold, fontWeight: '700', fontSize: 14, marginBottom: 4 }}>🎁 Hoş Geldiniz Hediyesi!</Text>
-              <Text style={{ color: C.textMid, fontSize: 13 }}>Kayıt olduğunuzda <Text style={{ fontWeight: '700', color: C.gold }}>250 TL</Text> hediye bakiye tanımlanacak.</Text>
+              <Text style={{ color: C.textMid, fontSize: 13 }}>Kayıt olduğunuzda <Text style={{ fontWeight: '700', color: C.gold }}>250 ₺</Text> hediye bakiye ve öncelikli listeleme avantajı kazanın.</Text>
             </View>
           )}
           <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]}
@@ -735,8 +1329,8 @@ function SahipMekanEkleFormu({ kullaniciId, onKaydet, onIptal }) {
   const [ozellik, setOzellik] = useState('');
   const [teknik, setTeknik] = useState('');
   const [aciklama, setAciklama] = useState('');
-  const [anaKat, setAnaKat] = useState('ozel_gunler');
-  const [altKat, setAltKat] = useState('dugun');
+  const [anaKat, setAnaKat] = useState('dis_pazarlama');
+  const [altKat, setAltKat] = useState('konferans_seminer'); // kurumsal varsayılan
   const [iletisimTuru, setIletisimTuru] = useState('whatsapp');
   const [iletisimNumarasi, setIletisimNumarasi] = useState('');
   const [iletisimEmail, setIletisimEmail] = useState('');
@@ -751,7 +1345,7 @@ function SahipMekanEkleFormu({ kullaniciId, onKaydet, onIptal }) {
     const { error } = await supabase.from('mekanlar').insert({
       isim, sehir, kapasite: parseInt(kapasite),
       ana_kategori: anaKat, alt_kategori: [altKat],
-      fotograf_url: foto || 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
+      fotograf_url: foto || 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
       fotograf_galeri: galeri, video_url: video || null,
       fiyat_aralik: fiyat, aciklama,
       fiziksel_ozellikler: ozellik ? ozellik.split(',').map(s => s.trim()) : [],
@@ -773,13 +1367,13 @@ function SahipMekanEkleFormu({ kullaniciId, onKaydet, onIptal }) {
           <Text style={{ color: C.gold, fontWeight: '600', fontSize: 13 }}>ℹ️ Mekanınız admin onayından sonra yayına girecek.</Text>
         </View>
         {[
-          { label: 'Mekan Adı *', val: isim, set: setIsim, ph: 'Grand Ballroom' },
+          { label: 'Mekan Adı *', val: isim, set: setIsim, ph: 'İstanbul Convention Center' },
           { label: 'Şehir *', val: sehir, set: setSehir, ph: 'İstanbul' },
           { label: 'Kapasite *', val: kapasite, set: setKapasite, ph: '500', kb: 'numeric' },
-          { label: 'Fiyat Aralığı', val: fiyat, set: setFiyat, ph: '50.000₺ - 150.000₺' },
+          { label: 'Fiyat Aralığı', val: fiyat, set: setFiyat, ph: '100.000₺ - 500.000₺' },
           { label: 'Video URL (YouTube)', val: video, set: setVideo, ph: 'https://youtube.com/...' },
-          { label: 'Fiziksel Özellikler (virgülle)', val: ozellik, set: setOzellik, ph: 'Teras, Bahçe' },
-          { label: 'Teknik Altyapı (virgülle)', val: teknik, set: setTeknik, ph: 'Projeksiyon, Ses' },
+          { label: 'Fiziksel Özellikler (virgülle)', val: ozellik, set: setOzellik, ph: 'Konferans Salonu, Gala Salonu, Hibrit Uyumlu' },
+          { label: 'Teknik Altyapı (virgülle)', val: teknik, set: setTeknik, ph: 'LED Ekran, Simultane Çeviri, Hızlı WiFi' },
         ].map((f, i) => (
           <View key={i}>
             <Text style={styles.inputEtiket}>{f.label}</Text>
@@ -787,7 +1381,7 @@ function SahipMekanEkleFormu({ kullaniciId, onKaydet, onIptal }) {
           </View>
         ))}
         <Text style={styles.inputEtiket}>Açıklama</Text>
-        <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]} placeholder="Mekanınız hakkında..." placeholderTextColor={C.textSoft} value={aciklama} onChangeText={setAciklama} multiline />
+        <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]} placeholder="Kurumsal etkinlikler için mekanınızı tanıtın..." placeholderTextColor={C.textSoft} value={aciklama} onChangeText={setAciklama} multiline />
 
         <Text style={[styles.inputEtiket, { marginTop: 8 }]}>İletişim Tercihi *</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -883,11 +1477,13 @@ function SahipPaneli({ kullanici, onCikis }) {
 
     const mekanIdleri = (mekanData || []).map(m => m.id);
 
+    // sahip_id ile eşleşen leadler
     const { data: leadsBySahip } = await supabase
       .from('leads').select('*')
       .eq('sahip_id', kullanici.id)
       .order('created_at', { ascending: false });
 
+    // mekan_id ile eşleşen leadler (sahip_id null olabilir)
     let leadsByMekan = [];
     if (mekanIdleri.length > 0) {
       const { data } = await supabase
@@ -897,6 +1493,7 @@ function SahipPaneli({ kullanici, onCikis }) {
       leadsByMekan = data || [];
     }
 
+    // Tekil birleştir
     const tumLeadler = [...(leadsBySahip || []), ...leadsByMekan];
     const tekLeadler = Array.from(new Map(tumLeadler.map(l => [l.id, l])).values())
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -1047,7 +1644,7 @@ function SahipPaneli({ kullanici, onCikis }) {
         {aktifTab === 'mekanlar' && (
           <View style={{ padding: 16 }}>
             <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight, marginBottom: 16 }]} onPress={() => setMekanEklemeAcik(true)}>
-              <Text style={styles.teklifBtnText}>+ Yeni Mekan Ekle</Text>
+              <Text style={styles.teklifBtnText}>🏢 Yeni Mekan Ekle</Text>
             </TouchableOpacity>
             {mekanlar.length === 0 && (
               <View style={styles.bosEkran}>
@@ -1175,60 +1772,115 @@ function SahipPaneli({ kullanici, onCikis }) {
 function LeadKarti({ lead: l, onDurumGuncelle }) {
   const bekliyor = !l.durum || l.durum === 'bekliyor';
   return (
-    <View style={[styles.adminKart, bekliyor && { borderColor: C.gold, borderWidth: 1.5 }]}>
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <Text style={styles.adminKartIsim}>{l.ad_soyad}</Text>
-          {bekliyor && (
-            <View style={{ backgroundColor: C.gold + '20', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
-              <Text style={{ fontSize: 10, color: C.gold, fontWeight: '700' }}>YENİ</Text>
+    <View style={[styles.adminKart, bekliyor && { borderColor: C.gold, borderWidth: 1.5 }, { flexDirection: 'column' }]}>
+      {/* Başlık satırı */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
+        paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: bekliyor ? C.gold + '20' : C.bg,
+            justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: bekliyor ? C.gold : C.border }}>
+            <Text style={{ fontSize: 16 }}>📋</Text>
+          </View>
+          <View>
+            <Text style={{ fontSize: 11, color: C.textSoft, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {bekliyor ? 'YENİ TEKLİF TALEBİ!' : 'Teklif Talebi'}
+            </Text>
+            <Text style={styles.adminKartTarih}>{formatTarih(l.created_at)}</Text>
+          </View>
+        </View>
+        {bekliyor && (
+          <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 10, color: C.white, fontWeight: '700' }}>YENİ</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Lead detayları — mail formatında */}
+      <View style={{ gap: 8, marginBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 14, width: 20 }}>👤</Text>
+          <Text style={{ fontSize: 13, color: C.textSoft, width: 80 }}>Ad Soyad:</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1 }}>{l.ad_soyad}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 14, width: 20 }}>📞</Text>
+          <Text style={{ fontSize: 13, color: C.textSoft, width: 80 }}>Telefon:</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1 }}>{l.telefon}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 14, width: 20 }}>🏢</Text>
+          <Text style={{ fontSize: 13, color: C.textSoft, width: 80 }}>Mekan:</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: C.midnight, flex: 1 }}>{l.mekan_isim}</Text>
+        </View>
+        {l.kisi_sayisi ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 14, width: 20 }}>👥</Text>
+            <Text style={{ fontSize: 13, color: C.textSoft, width: 80 }}>Kişi Sayısı:</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: C.text, flex: 1 }}>{l.kisi_sayisi}</Text>
+          </View>
+        ) : null}
+        {l.etkinlik_tarihi ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 14, width: 20 }}>📅</Text>
+            <Text style={{ fontSize: 13, color: C.textSoft, width: 80 }}>Tarih:</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: C.text, flex: 1 }}>{l.etkinlik_tarihi}</Text>
+          </View>
+        ) : null}
+        {l.alt_kategori ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 14, width: 20 }}>🎉</Text>
+            <Text style={{ fontSize: 13, color: C.textSoft, width: 80 }}>Etkinlik:</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: C.text, flex: 1 }}>{l.alt_kategori}</Text>
+          </View>
+        ) : null}
+        {l.notlar ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+            <Text style={{ fontSize: 14, width: 20, marginTop: 1 }}>💬</Text>
+            <Text style={{ fontSize: 13, color: C.textSoft, width: 80, marginTop: 1 }}>Not:</Text>
+            <View style={{ flex: 1, backgroundColor: C.bg, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: C.border }}>
+              <Text style={{ fontSize: 13, color: C.textMid, lineHeight: 20, fontStyle: 'italic' }}>"{l.notlar}"</Text>
             </View>
-          )}
-        </View>
-        <Text style={styles.adminKartDetay}>📞 {l.telefon}</Text>
-        <Text style={styles.adminKartDetay}>🏢 {l.mekan_isim}</Text>
-        {l.kisi_sayisi ? <Text style={styles.adminKartDetay}>👥 {l.kisi_sayisi} kişi</Text> : null}
-        {l.etkinlik_tarihi ? <Text style={styles.adminKartDetay}>📅 {l.etkinlik_tarihi}</Text> : null}
-        {l.alt_kategori ? <Text style={styles.adminKartDetay}>🎉 {l.alt_kategori}</Text> : null}
-        {l.notlar ? <Text style={styles.adminKartDetay}>💬 {l.notlar}</Text> : null}
-        <Text style={styles.adminKartTarih}>{formatTarih(l.created_at)}</Text>
+          </View>
+        ) : null}
+      </View>
 
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 4 }}>
-          <TouchableOpacity
-            style={[styles.durumBtn, { borderColor: C.whatsapp, flex: 1, alignItems: 'center' }]}
-            onPress={() => {
-              const numara = l.telefon.replace(/\D/g, '');
-              const url = `https://wa.me/90${numara}`;
-              if (Platform.OS === 'web') window.open(url, '_blank');
-              else Linking.openURL(url);
-            }}>
-            <Text style={[styles.durumBtnText, { color: C.whatsapp }]}>💬 WhatsApp</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.durumBtn, { borderColor: C.midnight, flex: 1, alignItems: 'center' }]}
-            onPress={() => {
-              const url = `tel:${l.telefon}`;
-              if (Platform.OS === 'web') window.location.href = url;
-              else Linking.openURL(url);
-            }}>
-            <Text style={[styles.durumBtnText, { color: C.midnight }]}>📞 Ara</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Aksiyon butonları */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+        <TouchableOpacity
+          style={[styles.durumBtn, { borderColor: C.whatsapp, flex: 1, alignItems: 'center', paddingVertical: 10 }]}
+          onPress={() => {
+            const numara = l.telefon.replace(/\D/g, '');
+            const url = `https://wa.me/90${numara}`;
+            if (Platform.OS === 'web') window.open(url, '_blank');
+            else Linking.openURL(url);
+          }}>
+          <Text style={[styles.durumBtnText, { color: C.whatsapp }]}>💬 WhatsApp</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.durumBtn, { borderColor: C.midnight, flex: 1, alignItems: 'center', paddingVertical: 10 }]}
+          onPress={() => {
+            const url = `tel:${l.telefon}`;
+            if (Platform.OS === 'web') window.location.href = url;
+            else Linking.openURL(url);
+          }}>
+          <Text style={[styles.durumBtnText, { color: C.midnight }]}>📞 Ara</Text>
+        </TouchableOpacity>
+      </View>
 
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          {['bekliyor', 'aranıyor', 'tamamlandı'].map(d => (
-            <TouchableOpacity
-              key={d}
-              style={[styles.durumBtn, l.durum === d && {
-                backgroundColor: d === 'tamamlandı' ? C.success : d === 'aranıyor' ? C.gold : C.midnight
-              }]}
-              onPress={() => onDurumGuncelle(d)}>
-              <Text style={[styles.durumBtnText, l.durum === d && { color: C.white }]}>
-                {d === 'bekliyor' ? '⏳' : d === 'aranıyor' ? '📞' : '✅'} {d}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* Durum güncelleme */}
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {['bekliyor', 'aranıyor', 'tamamlandı'].map(d => (
+          <TouchableOpacity
+            key={d}
+            style={[styles.durumBtn, { flex: 1 }, l.durum === d && {
+              backgroundColor: d === 'tamamlandı' ? C.success : d === 'aranıyor' ? C.gold : C.midnight
+            }]}
+            onPress={() => onDurumGuncelle(d)}>
+            <Text style={[styles.durumBtnText, { textAlign: 'center' }, l.durum === d && { color: C.white }]}>
+              {d === 'bekliyor' ? '⏳' : d === 'aranıyor' ? '📞' : '✅'} {d}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
@@ -1289,133 +1941,353 @@ function TeklifFormu({ mekan, onKapat, onGonder, kullanici, onGizlilikAc }) {
     Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }).start();
   }, []);
 
-  const isRomantik = mekan.alt_kategori?.includes('evlenme_teklifi');
+  const [firma, setFirma] = useState('');
+  const [etkinlikTuru, setEtkinlikTuru] = useState('');
 
   async function gonder() {
     if (!ad || !telefon) { alert('Lütfen ad ve telefon giriniz.'); return; }
-    // 1. KVKK kontrolü
     if (!kvkkOnay) { setKvkkHata(true); return; }
     setKvkkHata(false);
     setGonderiliyor(true);
-    await onGonder({ ad, telefon, kisi, notlar, tarih });
+    const notlarTam = [
+      firma ? `Firma: ${firma}` : '',
+      etkinlikTuru ? `Etkinlik türü: ${etkinlikTuru}` : '',
+      notlar,
+    ].filter(Boolean).join('\n');
+    await onGonder({ ad, telefon, kisi, notlar: notlarTam, tarih });
     setGonderiliyor(false);
   }
 
   return (
     <View style={styles.modalOverlay}>
-      <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }] }, isRomantik && { borderTopColor: C.romantic }]}>
-        <View style={[styles.modalBar, { backgroundColor: isRomantik ? C.romantic : C.gold }]} />
-        <Text style={styles.modalBaslik}>{isRomantik ? '💝 Özel Romantik Paket' : 'Fiyat Teklifi Al'}</Text>
-        <Text style={styles.modalAlt}>{mekan.isim}</Text>
-        <TextInput style={styles.formInput} placeholder="Ad Soyad *" placeholderTextColor={C.textSoft} value={ad} onChangeText={setAd} />
-        <TextInput style={styles.formInput} placeholder="Telefon *" placeholderTextColor={C.textSoft} value={telefon} onChangeText={setTelefon} keyboardType="phone-pad" />
-        <TextInput style={styles.formInput} placeholder="Kişi Sayısı" placeholderTextColor={C.textSoft} value={kisi} onChangeText={setKisi} keyboardType="numeric" />
-        {/* 3. Etkinlik tarihi — artık Supabase'de kolonu var */}
-        <TextInput style={styles.formInput} placeholder="Etkinlik Tarihi (gg.aa.yyyy)" placeholderTextColor={C.textSoft} value={tarih} onChangeText={setTarih} />
-        <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
-          placeholder={isRomantik ? 'Sürpriz detaylar...' : 'Notlar (opsiyonel)'}
-          placeholderTextColor={C.textSoft} value={notlar} onChangeText={setNotlar} multiline />
-
-        {/* 1. KVKK Onay Kutusu */}
-        <KVKKOnayKutusu
-          onayVerildi={kvkkOnay}
-          setOnayVerildi={(val) => { setKvkkOnay(val); if (val) setKvkkHata(false); }}
-          onGizlilikAc={onGizlilikAc}
-        />
-        {kvkkHata && (
-          <Text style={{ color: C.danger, fontSize: 12, marginBottom: 10, marginTop: -4 }}>
-            ⚠️ Devam etmek için gizlilik politikasını onaylamanız gerekiyor.
-          </Text>
-        )}
-
-        <TouchableOpacity
-          style={[styles.teklifBtn, { backgroundColor: isRomantik ? C.romantic : C.midnight, opacity: kvkkOnay ? 1 : 0.7 }]}
-          onPress={gonder}
-          disabled={gonderiliyor}>
-          <Text style={styles.teklifBtnText}>{gonderiliyor ? 'Gönderiliyor...' : '✓ Talebi Gönder'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center' }}>
-          <Text style={{ color: C.textSoft, fontSize: 14 }}>Vazgeç</Text>
-        </TouchableOpacity>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }], maxHeight: '94%' }]}>
+        <View style={[styles.modalBar, { backgroundColor: C.midnight }]} />
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <Text style={styles.modalBaslik}>📋 Teklif Talebi</Text>
+          <Text style={styles.modalAlt}>{mekan.isim}</Text>
+          <TextInput style={styles.formInput} placeholder="Ad Soyad *" placeholderTextColor={C.textSoft} value={ad} onChangeText={setAd} />
+          <TextInput style={styles.formInput} placeholder="Firma / Şirket Adı" placeholderTextColor={C.textSoft} value={firma} onChangeText={setFirma} />
+          <TextInput style={styles.formInput} placeholder="Telefon *" placeholderTextColor={C.textSoft} value={telefon} onChangeText={setTelefon} keyboardType="phone-pad" />
+          <TextInput style={styles.formInput} placeholder="Katılımcı Sayısı (tahmini)" placeholderTextColor={C.textSoft} value={kisi} onChangeText={setKisi} keyboardType="numeric" />
+          <TextInput style={styles.formInput} placeholder="Etkinlik Tarihi (gg.aa.yyyy)" placeholderTextColor={C.textSoft} value={tarih} onChangeText={setTarih} />
+          <TextInput style={styles.formInput} placeholder="Etkinlik Türü (ör: Ürün Lansmanı, Team Building)" placeholderTextColor={C.textSoft} value={etkinlikTuru} onChangeText={setEtkinlikTuru} />
+          <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
+            placeholder="Teknik gereksinimler, özel istekler..."
+            placeholderTextColor={C.textSoft} value={notlar} onChangeText={setNotlar} multiline />
+          <KVKKOnayKutusu
+            onayVerildi={kvkkOnay}
+            setOnayVerildi={(val) => { setKvkkOnay(val); if (val) setKvkkHata(false); }}
+            onGizlilikAc={onGizlilikAc}
+          />
+          {kvkkHata && (
+            <Text style={{ color: C.danger, fontSize: 12, marginBottom: 10, marginTop: -4 }}>
+              ⚠️ Devam etmek için gizlilik politikasını onaylamanız gerekiyor.
+            </Text>
+          )}
+          <TouchableOpacity
+            style={[styles.teklifBtn, { backgroundColor: C.midnight, opacity: kvkkOnay ? 1 : 0.7 }]}
+            onPress={gonder}
+            disabled={gonderiliyor}>
+            <Text style={styles.teklifBtnText}>{gonderiliyor ? 'Gönderiliyor...' : '✓ Teklif Talebini Gönder'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center', marginBottom: 24 }}>
+            <Text style={{ color: C.textSoft, fontSize: 14 }}>Vazgeç</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </Animated.View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 // ── MEKAN DETAY ───────────────────────────────────────────
-function MekanDetay({ mekan, onGeri, onTeklif, kullanici }) {
+function MekanDetay({ mekan, onGeri, onTeklif, kullanici, favoriler, onFavoriToggle }) {
   const [aktifIndex, setAktifIndex] = useState(0);
   const [tamEkran, setTamEkran] = useState(false);
+  const [yorumMetni, setYorumMetni] = useState('');
+  const [yorumPuan, setYorumPuan] = useState(5);
+  const [yorumlar, setYorumlar] = useState([]);
+  const [yorumGonderiliyor, setYorumGonderiliyor] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const isRomantik = mekan.alt_kategori?.includes('evlenme_teklifi');
-  const accentRenk = isRomantik ? C.romantic : C.gold;
+  const detayScrollRef = useRef(null);
+  const isRomantik = false; // Kurumsal platform
+  const accentRenk = C.midnight;
   const tumFotolar = [mekan.fotograf_url, ...(mekan.fotograf_galeri || [])].filter(Boolean);
+  const isFavori = (favoriler || []).includes(mekan.id);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    seoGuncelle({
+      title: `${mekan.isim} — ${mekan.sehir}`,
+      description: mekan.aciklama || `${mekan.isim}, ${mekan.sehir}. ${mekan.kapasite} kişiye kadar kurumsal etkinlik. etkinlink üzerinden ücretsiz teklif alın.`,
+      image: mekan.fotograf_url,
+    });
+    yorumlariGetir();
+    return () => seoGuncelle();
   }, []);
 
+  async function yorumlariGetir() {
+    try {
+      const data = await apiFetch(`mekan_yorumlar?mekan_id=eq.${mekan.id}&order=created_at.desc&select=*`);
+      if (Array.isArray(data)) setYorumlar(data);
+    } catch(e) {}
+  }
+
+  async function yorumGonder() {
+    if (!kullanici) { alert('Yorum yapmak için giriş yapmalısınız.'); return; }
+    if (!yorumMetni.trim()) { alert('Lütfen bir yorum yazın.'); return; }
+    setYorumGonderiliyor(true);
+    try {
+      const yeniYorum = {
+        mekan_id: mekan.id,
+        kullanici_id: kullanici.auth_id || kullanici.id,
+        kullanici_ad: kullanici.ad_soyad,
+        puan: yorumPuan,
+        yorum: yorumMetni.trim(),
+        created_at: new Date().toISOString(),
+      };
+      const res = await apiPost('mekan_yorumlar', yeniYorum);
+      if (!res.ok) {
+        const errText = await res.text();
+        alert('Yorum gönderilemedi: ' + errText);
+        setYorumGonderiliyor(false);
+        return;
+      }
+      // Optimistic: hemen listeye ekle
+      const tumYorumlar = [yeniYorum, ...yorumlar];
+      setYorumlar(tumYorumlar);
+      // Puan ortalamasını güncelle
+      const ort = tumYorumlar.reduce((s, y) => s + y.puan, 0) / tumYorumlar.length;
+      await apiPatch(`mekanlar?id=eq.${mekan.id}`, { puan: Math.round(ort * 10) / 10 });
+      setYorumMetni('');
+      setYorumPuan(5);
+      // Sunucudan taze veriyi çek
+      await yorumlariGetir();
+    } catch (e) { alert('Hata: ' + e.message); }
+    setYorumGonderiliyor(false);
+  }
+
   return (
-    <Animated.View style={[{ flex: 1, backgroundColor: isRomantik ? C.romanticSoft : C.bg }, { opacity: fadeAnim }]}>
+    <Animated.View style={[{ flex: 1, backgroundColor: C.bg }, { opacity: fadeAnim }]}>
       {tamEkran && (
-        <View style={styles.tamEkranOverlay}>
-          <Image source={{ uri: tumFotolar[aktifIndex] }} style={styles.tamEkranGorsel} resizeMode="contain" />
-          <TouchableOpacity style={styles.tamEkranKapat} onPress={() => setTamEkran(false)}>
-            <Text style={styles.tamEkranKapatText}>✕</Text>
-          </TouchableOpacity>
+        <View style={[styles.tamEkranOverlay, { zIndex: 9999 }]}>
+          {/* Swipe edilebilir tam ekran scroll — önce render et ki altta kalsın */}
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={{ flex: 1, width: SCREEN_WIDTH }}
+            contentOffset={{ x: aktifIndex * SCREEN_WIDTH, y: 0 }}
+            onMomentumScrollEnd={(e) => {
+              const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setAktifIndex(i);
+            }}
+          >
+            {tumFotolar.map((foto, i) => (
+              <View key={i} style={{ width: SCREEN_WIDTH, justifyContent: 'center', alignItems: 'center' }}>
+                <Image
+                  source={{ uri: foto }}
+                  style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 0.85 }}
+                  resizeMode="contain"
+                />
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Sol ok */}
+          {tumFotolar.length > 1 && aktifIndex > 0 && (
+            <TouchableOpacity
+              onPress={() => setAktifIndex(i => Math.max(0, i - 1))}
+              style={[styles.tamEkranNavBtn, { position: 'absolute', left: 16, top: '50%', marginTop: -22, zIndex: 10001 }]}>
+              <Text style={styles.tamEkranNavText}>‹</Text>
+            </TouchableOpacity>
+          )}
+          {/* Sağ ok */}
+          {tumFotolar.length > 1 && aktifIndex < tumFotolar.length - 1 && (
+            <TouchableOpacity
+              onPress={() => setAktifIndex(i => Math.min(tumFotolar.length - 1, i + 1))}
+              style={[styles.tamEkranNavBtn, { position: 'absolute', right: 16, top: '50%', marginTop: -22, zIndex: 10001 }]}>
+              <Text style={styles.tamEkranNavText}>›</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Alt nokta indikatörler */}
           {tumFotolar.length > 1 && (
-            <View style={styles.tamEkranNavRow}>
-              <TouchableOpacity onPress={() => setAktifIndex(Math.max(0, aktifIndex - 1))} style={styles.tamEkranNavBtn}>
-                <Text style={styles.tamEkranNavText}>‹</Text>
-              </TouchableOpacity>
-              <Text style={{ color: C.white, fontSize: 14 }}>{aktifIndex + 1} / {tumFotolar.length}</Text>
-              <TouchableOpacity onPress={() => setAktifIndex(Math.min(tumFotolar.length - 1, aktifIndex + 1))} style={styles.tamEkranNavBtn}>
-                <Text style={styles.tamEkranNavText}>›</Text>
-              </TouchableOpacity>
+            <View style={{ position: 'absolute', bottom: 44, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 8, alignItems: 'center', zIndex: 10001 }}>
+              {tumFotolar.map((_, di) => (
+                <View key={di} style={{
+                  width: di === aktifIndex ? 20 : 7, height: 7, borderRadius: 4,
+                  backgroundColor: di === aktifIndex ? C.white : 'rgba(255,255,255,0.35)',
+                }} />
+              ))}
             </View>
           )}
+
+          {/* Sayaç — en üstte */}
+          <View style={{ position: 'absolute', top: 52, left: 0, right: 0, alignItems: 'center', zIndex: 10002, pointerEvents: 'none' }}>
+            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' }}>
+              {aktifIndex + 1} / {tumFotolar.length}
+            </Text>
+          </View>
+
+          {/* Kapatma butonu — her şeyin üzerinde, en son render */}
+          <TouchableOpacity
+            onPress={() => setTamEkran(false)}
+            style={{
+              position: 'absolute', top: 44, right: 20,
+              width: 44, height: 44, borderRadius: 22,
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              justifyContent: 'center', alignItems: 'center',
+              zIndex: 10003,
+            }}>
+            <Text style={{ color: C.white, fontSize: 20, fontWeight: '700' }}>✕</Text>
+          </TouchableOpacity>
         </View>
       )}
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={{ position: 'relative' }}>
+        {/* ── DETAY CAROUSEL ── */}
+        <View style={{ position: 'relative', height: 320, backgroundColor: C.midnight }}>
           <ScrollView
-            horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-            style={{ width: SCREEN_WIDTH, height: 320 }}
-            onMomentumScrollEnd={(e) => setAktifIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}>
+            ref={detayScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+            style={{ height: 320 }}
+            onMomentumScrollEnd={(e) => {
+              const newIdx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setAktifIndex(newIdx);
+            }}
+            onScroll={(e) => {
+              // Web'de smooth scroll tracking
+              if (Platform.OS === 'web') {
+                const newIdx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                if (newIdx !== aktifIndex) setAktifIndex(newIdx);
+              }
+            }}
+          >
             {tumFotolar.map((foto, i) => (
-              <TouchableOpacity key={i} onPress={() => { setAktifIndex(i); setTamEkran(true); }} activeOpacity={0.95}>
+              <TouchableOpacity
+                key={i}
+                activeOpacity={0.97}
+                onPress={() => { setAktifIndex(i); setTamEkran(true); }}
+                style={{ width: SCREEN_WIDTH, height: 320 }}
+              >
                 <Image source={{ uri: foto }} style={{ width: SCREEN_WIDTH, height: 320 }} resizeMode="cover" />
+                {/* Gradient overlay for bottom info readability */}
+                <View style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0, height: 100,
+                  background: 'linear-gradient(transparent, rgba(0,0,0,0.55))',
+                }} />
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* Geri butonu */}
           <TouchableOpacity style={styles.geriBtnDetay} onPress={onGeri}>
             <Text style={styles.geriBtnText}>←</Text>
           </TouchableOpacity>
-          {tumFotolar.length > 1 && (
-            <View style={styles.fotoDots}>
-              {tumFotolar.map((_, i) => <View key={i} style={[styles.fotoDot, aktifIndex === i && { backgroundColor: C.white, width: 16 }]} />)}
-            </View>
-          )}
-          {tumFotolar.length > 1 && (
-            <View style={styles.galeriBadge}>
-              <Text style={styles.galeriBadgeText}>📷 {aktifIndex + 1}/{tumFotolar.length}</Text>
-            </View>
-          )}
-          <View style={[styles.puanBadge, { backgroundColor: accentRenk }]}>
+
+          {/* Puan badge */}
+          <View style={[styles.puanBadge, { backgroundColor: accentRenk, top: 14, right: 14 }]}>
             <Text style={styles.puanText}>★ {mekan.puan}</Text>
           </View>
-          {isRomantik && (
-            <View style={[styles.oneCikanBadge, { backgroundColor: C.romantic }]}>
-              <Text style={styles.oneCikanText}>💝 Romantik</Text>
+
+          {/* Sol ok */}
+          {tumFotolar.length > 1 && aktifIndex > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                const yeni = aktifIndex - 1;
+                setAktifIndex(yeni);
+                detayScrollRef.current?.scrollTo({ x: yeni * SCREEN_WIDTH, animated: true });
+              }}
+              style={{
+                position: 'absolute', left: 12, top: '50%', marginTop: -24,
+                width: 44, height: 44, borderRadius: 22,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+              <Text style={{ color: C.white, fontSize: 24, fontWeight: '700' }}>‹</Text>
+            </TouchableOpacity>
+          )}
+          {/* Sağ ok */}
+          {tumFotolar.length > 1 && aktifIndex < tumFotolar.length - 1 && (
+            <TouchableOpacity
+              onPress={() => {
+                const yeni = aktifIndex + 1;
+                setAktifIndex(yeni);
+                detayScrollRef.current?.scrollTo({ x: yeni * SCREEN_WIDTH, animated: true });
+              }}
+              style={{
+                position: 'absolute', right: 12, top: '50%', marginTop: -24,
+                width: 44, height: 44, borderRadius: 22,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+              <Text style={{ color: C.white, fontSize: 24, fontWeight: '700' }}>›</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Alt: nokta indikatörler + sayaç */}
+          {tumFotolar.length > 1 && (
+            <View style={{
+              position: 'absolute', bottom: 14, left: 0, right: 0,
+              flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
+            }}>
+              {tumFotolar.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => {
+                    setAktifIndex(i);
+                    detayScrollRef.current?.scrollTo({ x: i * SCREEN_WIDTH, animated: true });
+                  }}
+                  style={{
+                    width: i === aktifIndex ? 20 : 7,
+                    height: 7, borderRadius: 4,
+                    backgroundColor: i === aktifIndex ? C.white : 'rgba(255,255,255,0.45)',
+                  }}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Fotoğraf sayacı ve "büyüt" ipucu */}
+          {tumFotolar.length > 1 && (
+            <View style={[styles.galeriBadge, { bottom: 12, right: 12 }]}>
+              <Text style={styles.galeriBadgeText}>🔍 {aktifIndex + 1}/{tumFotolar.length}</Text>
             </View>
           )}
         </View>
 
+        {/* Thumbnail strip */}
         {tumFotolar.length > 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 12, paddingHorizontal: 16 }} contentContainerStyle={{ gap: 8 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ backgroundColor: C.midnight, paddingVertical: 10 }}
+            contentContainerStyle={{ paddingHorizontal: 14, gap: 8 }}
+          >
             {tumFotolar.map((foto, i) => (
-              <TouchableOpacity key={i} onPress={() => setAktifIndex(i)}>
-                <Image source={{ uri: foto }} style={[styles.thumbnail, aktifIndex === i && { borderColor: accentRenk, borderWidth: 2.5 }]} resizeMode="cover" />
+              <TouchableOpacity
+                key={i}
+                onPress={() => {
+                  setAktifIndex(i);
+                  detayScrollRef.current?.scrollTo({ x: i * SCREEN_WIDTH, animated: true });
+                }}
+                style={{
+                  borderRadius: 10,
+                  borderWidth: i === aktifIndex ? 2.5 : 1.5,
+                  borderColor: i === aktifIndex ? C.gold : 'rgba(255,255,255,0.25)',
+                  overflow: 'hidden',
+                  opacity: i === aktifIndex ? 1 : 0.6,
+                }}>
+                <Image
+                  source={{ uri: foto }}
+                  style={{ width: 68, height: 52 }}
+                  resizeMode="cover"
+                />
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -1500,11 +2372,65 @@ function MekanDetay({ mekan, onGeri, onTeklif, kullanici }) {
               </View>
             </View>
           )}
+
+          {/* 7. YORUM & PUANLAMA BÖLÜMÜ */}
+          <View style={styles.detayBolum}>
+            <Text style={styles.detayBolumBaslik}>Yorumlar & Puanlar</Text>
+            {yorumlar.length === 0 && (
+              <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 12 }}>Henüz yorum yok. İlk yorumu sen yap!</Text>
+            )}
+            {yorumlar.map((y, i) => (
+              <View key={i} style={{ backgroundColor: C.white, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontWeight: '700', color: C.text, fontSize: 14 }}>{y.kullanici_ad || 'Anonim'}</Text>
+                  <Text style={{ color: C.gold, fontWeight: '700' }}>{'★'.repeat(y.puan)}{'☆'.repeat(5 - y.puan)}</Text>
+                </View>
+                <Text style={{ color: C.textMid, fontSize: 13, lineHeight: 20 }}>{y.yorum}</Text>
+              </View>
+            ))}
+            {kullanici ? (
+              <View style={{ marginTop: 8 }}>
+                <Text style={[styles.inputEtiket, { marginBottom: 8 }]}>Puanın:</Text>
+                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+                  {[1,2,3,4,5].map(p => (
+                    <TouchableOpacity key={p} onPress={() => setYorumPuan(p)}
+                      style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: yorumPuan >= p ? C.gold : C.bg, borderWidth: 1, borderColor: yorumPuan >= p ? C.gold : C.border }}>
+                      <Text style={{ color: yorumPuan >= p ? C.white : C.textSoft, fontWeight: '700' }}>★</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
+                  placeholder="Deneyiminizi paylaşın..."
+                  placeholderTextColor={C.textSoft}
+                  value={yorumMetni}
+                  onChangeText={setYorumMetni}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.teklifBtn, { backgroundColor: accentRenk }]}
+                  onPress={yorumGonder}
+                  disabled={yorumGonderiliyor}>
+                  <Text style={styles.teklifBtnText}>{yorumGonderiliyor ? 'Gönderiliyor...' : '✓ Yorum Gönder'}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={{ color: C.textSoft, fontSize: 13, fontStyle: 'italic' }}>Yorum yapmak için giriş yapın.</Text>
+            )}
+          </View>
+
           <View style={{ height: 120 }} />
         </View>
       </ScrollView>
 
       <View style={[styles.stickyCta, isRomantik && { backgroundColor: C.romanticSoft }]}>
+        <TouchableOpacity
+          onPress={() => onFavoriToggle && onFavoriToggle(mekan.id)}
+          style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isFavori ? C.gold + '20' : C.bg,
+            borderWidth: 1.5, borderColor: isFavori ? C.gold : C.border, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 20 }}>{isFavori ? '♥' : '♡'}</Text>
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           {mekan.fiyat_aralik && <Text style={[styles.stickyFiyat, { color: accentRenk }]}>{mekan.fiyat_aralik}</Text>}
           <Text style={styles.stickyKapasite}>👥 {mekan.kapasite} kişiye kadar</Text>
@@ -1515,10 +2441,147 @@ function MekanDetay({ mekan, onGeri, onTeklif, kullanici }) {
   );
 }
 
+// ── KARŞILAŞTIRMA MODALI ─────────────────────────────────
+function KarsilastirmaModal({ mekanlar, onKapat, onTeklif, onTopluTeklif, kullanici }) {
+  const alanlar = [
+    { key: 'kapasite',    label: '👥 Kapasite', fmt: v => v ? `${v} kişi` : '—' },
+    { key: 'fiyat_aralik',label: '💰 Fiyat',    fmt: v => v || '—' },
+    { key: 'puan',        label: '★ Puan',       fmt: v => v ? String(v) : '—' },
+    { key: 'sehir',       label: '📍 Şehir',     fmt: v => v || '—' },
+  ];
+  const colW = mekanlar.length === 2 ? '45%' : '30%';
+  return (
+    <View style={styles.modalOverlay}>
+      <View style={[styles.modal, { maxHeight: '92%', paddingHorizontal: 0 }]}>
+        <View style={[styles.modalBar, { backgroundColor: C.midnight }]} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 16 }}>
+          <Text style={[styles.modalBaslik, { marginBottom: 0 }]}>⚖️ Karşılaştır</Text>
+          <TouchableOpacity onPress={onKapat} style={{ padding: 8 }}>
+            <Text style={{ fontSize: 20, color: C.textSoft }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: 20 }}>
+          {/* Başlıklar */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            <View style={{ width: 90 }} />
+            {mekanlar.map((m, i) => (
+              <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                <Image source={{ uri: m.fotograf_url }} style={{ width: '100%', height: 70, borderRadius: 10 }} resizeMode="cover" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: C.text, textAlign: 'center', marginTop: 6 }} numberOfLines={2}>{m.isim}</Text>
+              </View>
+            ))}
+          </View>
+          {/* Satırlar */}
+          {alanlar.map((alan, ai) => (
+            <View key={ai} style={{ flexDirection: 'row', gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' }}>
+              <Text style={{ width: 90, fontSize: 11, color: C.textSoft, fontWeight: '600' }}>{alan.label}</Text>
+              {mekanlar.map((m, mi) => {
+                const isNum = alan.key === 'kapasite' || alan.key === 'puan';
+                const best = isNum ? Math.max(...mekanlar.map(x => Number(x[alan.key]) || 0)) : null;
+                const isBest = isNum && Number(m[alan.key]) === best && best > 0;
+                return (
+                  <View key={mi} style={{ flex: 1, alignItems: 'center', backgroundColor: isBest ? C.gold + '15' : 'transparent', borderRadius: 8, padding: 4 }}>
+                    <Text style={{ fontSize: 13, fontWeight: isBest ? '700' : '500', color: isBest ? C.gold : C.text, textAlign: 'center' }}>
+                      {alan.fmt(m[alan.key])}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+          {/* Teklif butonları */}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+            <View style={{ width: 90 }} />
+            {mekanlar.map((m, i) => (
+              <TouchableOpacity key={i} style={[styles.teklifBtn, { flex: 1, backgroundColor: C.midnight, paddingVertical: 10 }]}
+                onPress={() => { onKapat(); onTeklif(m); }}>
+                <Text style={[styles.teklifBtnText, { fontSize: 12 }]}>Teklif Al</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {mekanlar.length > 1 && onTopluTeklif && (
+            <TouchableOpacity
+              style={[styles.teklifBtn, { backgroundColor: C.gold, marginTop: 10, marginHorizontal: 0 }]}
+              onPress={onTopluTeklif}>
+              <Text style={styles.teklifBtnText}>📋 Tümüne Aynı Anda Teklif Al</Text>
+            </TouchableOpacity>
+          )}
+          <View style={{ height: 20 }} />
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+// ── TOPLU TEKLİF FORMU ───────────────────────────────────
+function TopluTeklifFormu({ mekanlar, onKapat, onGonder, kullanici, onGizlilikAc }) {
+  const [ad, setAd] = useState(kullanici?.ad_soyad || '');
+  const [telefon, setTelefon] = useState(kullanici?.telefon || '');
+  const [kisi, setKisi] = useState('');
+  const [tarih, setTarih] = useState('');
+  const [notlar, setNotlar] = useState('');
+  const [kvkkOnay, setKvkkOnay] = useState(false);
+  const [kvkkHata, setKvkkHata] = useState(false);
+  const [gonderiliyor, setGonderiliyor] = useState(false);
+  const slideAnim = useRef(new Animated.Value(400)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }).start();
+  }, []);
+
+  async function gonder() {
+    if (!ad || !telefon) { alert('Ad ve telefon zorunlu.'); return; }
+    if (!kvkkOnay) { setKvkkHata(true); return; }
+    setGonderiliyor(true);
+    await onGonder({ ad, telefon, kisi, tarih, notlar, mekanlar });
+    setGonderiliyor(false);
+  }
+
+  return (
+    <View style={styles.modalOverlay}>
+      <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }], maxHeight: '92%', paddingHorizontal: 0 }]}>
+        <View style={[styles.modalBar, { backgroundColor: C.gold }]} />
+        <ScrollView style={{ paddingHorizontal: 28 }} showsVerticalScrollIndicator={false}>
+          <Text style={styles.modalBaslik}>📋 Toplu Teklif Al</Text>
+          <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 16, marginTop: -2 }}>{mekanlar.length} mekandan aynı anda teklif istiyorsunuz:</Text>
+          {mekanlar.map((m, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8,
+              backgroundColor: C.goldSoft, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: C.goldLight }}>
+              <Text style={{ fontSize: 18 }}>🏛</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', color: C.midnight, fontSize: 13 }}>{m.isim}</Text>
+                <Text style={{ color: C.textSoft, fontSize: 11 }}>📍 {m.sehir}</Text>
+              </View>
+            </View>
+          ))}
+          <View style={{ height: 16 }} />
+          <TextInput style={styles.formInput} placeholder="Ad Soyad *" placeholderTextColor={C.textSoft} value={ad} onChangeText={setAd} />
+          <TextInput style={styles.formInput} placeholder="Telefon *" placeholderTextColor={C.textSoft} value={telefon} onChangeText={setTelefon} keyboardType="phone-pad" />
+          <TextInput style={styles.formInput} placeholder="Kişi Sayısı" placeholderTextColor={C.textSoft} value={kisi} onChangeText={setKisi} keyboardType="numeric" />
+          <TextInput style={styles.formInput} placeholder="Etkinlik Tarihi (gg.aa.yyyy)" placeholderTextColor={C.textSoft} value={tarih} onChangeText={setTarih} />
+          <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
+            placeholder="Notlar (opsiyonel)" placeholderTextColor={C.textSoft} value={notlar} onChangeText={setNotlar} multiline />
+          <KVKKOnayKutusu onayVerildi={kvkkOnay} setOnayVerildi={(v) => { setKvkkOnay(v); if (v) setKvkkHata(false); }} onGizlilikAc={onGizlilikAc} />
+          {kvkkHata && <Text style={{ color: C.danger, fontSize: 12, marginBottom: 10, marginTop: -4 }}>⚠️ Gizlilik politikasını onaylamanız gerekiyor.</Text>}
+          <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]} onPress={gonder} disabled={gonderiliyor}>
+            <Text style={styles.teklifBtnText}>{gonderiliyor ? 'Gönderiliyor...' : `✓ ${mekanlar.length} Mekana Teklif Gönder`}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onKapat} style={{ marginTop: 14, alignItems: 'center', marginBottom: 20 }}>
+            <Text style={{ color: C.textSoft, fontSize: 14 }}>Vazgeç</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
 // ── MEKAN KARTI ───────────────────────────────────────────
-function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici }) {
+function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici, favoriler, onFavoriToggle, karsilastirmaListesi, onKarsilastirmaToggle }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const [kartFotoIndex, setKartFotoIndex] = useState(0);
+  const kartScrollRef = useRef(null);
+  const kartFotolar = [mekan.fotograf_url, ...(mekan.fotograf_galeri || [])].filter(Boolean);
 
   useEffect(() => {
     Animated.parallel([
@@ -1527,9 +2590,24 @@ function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici })
     ]).start();
   }, []);
 
-  const isRomantik = romantikMod || mekan.alt_kategori?.includes('evlenme_teklifi');
-  const accentRenk = isRomantik ? C.romantic : C.gold;
-  const toplamMedya = (mekan.fotograf_galeri || []).length + (mekan.video_url ? 1 : 0);
+  function kartFotoGit(yon) {
+    const yeni = Math.max(0, Math.min(kartFotolar.length - 1, kartFotoIndex + yon));
+    setKartFotoIndex(yeni);
+    if (kartScrollRef.current) {
+      if (Platform.OS === 'web') {
+        kartScrollRef.current.scrollTo({ x: yeni * KART_GORSEL_W, animated: true });
+      } else {
+        kartScrollRef.current.scrollTo({ x: yeni * KART_GORSEL_W, animated: true });
+      }
+    }
+  }
+
+  const isRomantik = false;
+  const accentRenk = C.midnight;
+  const isFavori = (favoriler || []).includes(mekan.id);
+  const isKarsilastirmada = (karsilastirmaListesi || []).some(m => m.id === mekan.id);
+  const KART_GORSEL_W = IS_DESKTOP ? Math.floor((SCREEN_WIDTH - 64) / 2) : SCREEN_WIDTH - 32;
+  const KART_GORSEL_H = 210;
 
   return (
     <Animated.View style={[
@@ -1537,28 +2615,98 @@ function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici })
       IS_DESKTOP && styles.kartDesktop,
       { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
       isRomantik && { borderColor: C.romantic + '30' },
+      isKarsilastirmada && { borderColor: C.gold, borderWidth: 2 },
     ]}>
-      <TouchableOpacity onPress={() => onDetay(mekan)} activeOpacity={0.95}>
-        <Image source={{ uri: mekan.fotograf_url }} style={styles.kartGorsel} />
-        <View style={[styles.puanBadge, { backgroundColor: accentRenk }]}>
-          <Text style={styles.puanText}>★ {mekan.puan}</Text>
-        </View>
+      {/* KART CAROUSEL */}
+      <View style={{ position: 'relative', height: KART_GORSEL_H }}>
+        <ScrollView
+          ref={kartScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => {
+            const newIdx = Math.round(e.nativeEvent.contentOffset.x / KART_GORSEL_W);
+            setKartFotoIndex(newIdx);
+          }}
+          style={{ height: KART_GORSEL_H }}
+        >
+          {kartFotolar.map((foto, fi) => (
+            <TouchableOpacity
+              key={fi}
+              activeOpacity={0.95}
+              onPress={() => onDetay(mekan)}
+              style={{ width: KART_GORSEL_W, height: KART_GORSEL_H }}
+            >
+              <Image source={{ uri: foto }} style={{ width: KART_GORSEL_W, height: KART_GORSEL_H }} resizeMode="cover" />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Öne çıkan badge */}
         {mekan.one_cikan && (
-          <View style={styles.oneCikanBadge}>
+          <View style={[styles.oneCikanBadge, { top: 12, left: 12 }]}>
             <Text style={styles.oneCikanText}>✦ Öne Çıkan</Text>
           </View>
         )}
-        {isRomantik && (
-          <View style={[styles.oneCikanBadge, { backgroundColor: C.romantic, left: 14, right: 'auto' }]}>
-            <Text style={styles.oneCikanText}>💝 Romantik</Text>
+
+        {/* Puan badge */}
+        <View style={[styles.puanBadge, { backgroundColor: accentRenk, top: 12, right: 12 }]}>
+          <Text style={styles.puanText}>★ {mekan.puan}</Text>
+        </View>
+
+        {/* Favori butonu */}
+        <TouchableOpacity
+          onPress={() => onFavoriToggle && onFavoriToggle(mekan.id)}
+          style={{ position: 'absolute', bottom: 12, left: 12, width: 34, height: 34, borderRadius: 17,
+            backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 18, color: isFavori ? '#FF6B6B' : C.white }}>{isFavori ? '♥' : '♡'}</Text>
+        </TouchableOpacity>
+
+        {/* Sol/Sağ ok butonları — sadece birden fazla fotoğraf varsa */}
+        {kartFotolar.length > 1 && kartFotoIndex > 0 && (
+          <TouchableOpacity
+            onPress={(e) => { e.stopPropagation && e.stopPropagation(); kartFotoGit(-1); }}
+            style={{
+              position: 'absolute', left: 8, top: '50%', marginTop: -18,
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+            <Text style={{ color: C.white, fontSize: 18, fontWeight: '700', lineHeight: 22 }}>‹</Text>
+          </TouchableOpacity>
+        )}
+        {kartFotolar.length > 1 && kartFotoIndex < kartFotolar.length - 1 && (
+          <TouchableOpacity
+            onPress={(e) => { e.stopPropagation && e.stopPropagation(); kartFotoGit(1); }}
+            style={{
+              position: 'absolute', right: 8, top: '50%', marginTop: -18,
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+            <Text style={{ color: C.white, fontSize: 18, fontWeight: '700', lineHeight: 22 }}>›</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Nokta indikatörler */}
+        {kartFotolar.length > 1 && (
+          <View style={{
+            position: 'absolute', bottom: 10, right: 12,
+            flexDirection: 'row', gap: 4, alignItems: 'center',
+            backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10,
+            paddingHorizontal: 8, paddingVertical: 4,
+          }}>
+            {kartFotolar.map((_, di) => (
+              <View key={di} style={{
+                width: di === kartFotoIndex ? 14 : 5,
+                height: 5, borderRadius: 3,
+                backgroundColor: di === kartFotoIndex ? C.white : 'rgba(255,255,255,0.45)',
+              }} />
+            ))}
           </View>
         )}
-        {toplamMedya > 0 && (
-          <View style={styles.galeriBadge}>
-            <Text style={styles.galeriBadgeText}>{mekan.video_url ? '▶️ Video' : `📷 +${mekan.fotograf_galeri.length}`}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      </View>
 
       <View style={styles.kartIcerik}>
         <TouchableOpacity onPress={() => onDetay(mekan)}>
@@ -1573,7 +2721,7 @@ function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici })
               </View>
             )}
           </View>
-          <Text style={styles.kapasiteText}>👥 {mekan.kapasite} kişiye kadar</Text>
+          <Text style={styles.kapasiteText}>👥 {mekan.kapasite} katılımcıya kadar</Text>
         </TouchableOpacity>
 
         {(mekan.fiziksel_ozellikler || []).length > 0 && (
@@ -1602,6 +2750,17 @@ function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici })
           {mekan.video_url && <Text style={styles.ikonText}>▶️ Video</Text>}
         </View>
 
+        {/* 9. KARŞILAŞTIRMA BUTONU */}
+        <TouchableOpacity
+          onPress={() => onKarsilastirmaToggle && onKarsilastirmaToggle(mekan)}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+            paddingVertical: 7, borderRadius: 10, marginBottom: 8,
+            backgroundColor: isKarsilastirmada ? C.midnight + '10' : 'transparent',
+            borderWidth: 1, borderColor: isKarsilastirmada ? C.midnight : C.border }}>
+          <Text style={{ fontSize: 12, color: isKarsilastirmada ? C.midnight : C.textSoft, fontWeight: '600' }}>
+            {isKarsilastirmada ? '✓ Karşılaştırmada' : '⚖️ Karşılaştırmaya Ekle'}
+          </Text>
+        </TouchableOpacity>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity style={[styles.detayBtn, { borderColor: isRomantik ? C.romantic : C.midnight }]} onPress={() => onDetay(mekan)}>
             <Text style={[styles.detayBtnText, { color: isRomantik ? C.romantic : C.midnight }]}>Detaylar →</Text>
@@ -1613,13 +2772,78 @@ function MekanKarti({ mekan, onTeklif, onDetay, romantikMod, index, kullanici })
   );
 }
 
+// ── BLOG DETAY MODAL ──────────────────────────────────────
+function BlogDetayModal({ yazi, onKapat }) {
+  const slideAnim = useRef(new Animated.Value(800)).current;
+  useEffect(() => {
+    Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 12, useNativeDriver: true }).start();
+    if (Platform.OS === 'web') {
+      seoGuncelle({
+        title: yazi.baslik,
+        description: yazi.ozet || yazi.icerik?.substring(0, 160),
+        image: yazi.kapak_foto,
+      });
+    }
+    return () => { if (Platform.OS === 'web') seoGuncelle(); };
+  }, []);
+
+  return (
+    <View style={[styles.modalOverlay, { justifyContent: 'flex-start' }]}>
+      <Animated.View style={[{
+        flex: 1, backgroundColor: C.white,
+        transform: [{ translateY: slideAnim }],
+        marginTop: 48, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      }]}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+          paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border }}>
+          <TouchableOpacity onPress={onKapat} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 16, color: C.midnight }}>←</Text>
+            <Text style={{ fontSize: 13, color: C.midnight, fontWeight: '600' }}>Blog</Text>
+          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {(yazi.etiketler || []).slice(0, 3).map((e, i) => (
+              <View key={i} style={{ backgroundColor: C.accentSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Text style={{ fontSize: 10, color: C.accent, fontWeight: '700' }}>#{e}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity onPress={onKapat} style={{ padding: 4 }}>
+            <Text style={{ fontSize: 20, color: C.textSoft }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {yazi.kapak_foto && (
+            <Image source={{ uri: yazi.kapak_foto }} style={{ width: '100%', height: 220 }} resizeMode="cover" />
+          )}
+          <View style={{ padding: 24 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.5, lineHeight: 30, marginBottom: 12 }}>
+              {yazi.baslik}
+            </Text>
+            <Text style={{ fontSize: 12, color: C.textSoft, marginBottom: 20 }}>
+              📅 {new Date(yazi.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {'  ·  '}etkinlink
+            </Text>
+            {yazi.ozet && (
+              <View style={{ backgroundColor: C.accentSoft, borderRadius: 12, padding: 16, marginBottom: 20, borderLeftWidth: 3, borderLeftColor: C.accent }}>
+                <Text style={{ fontSize: 14, color: C.accent, fontWeight: '600', lineHeight: 22 }}>{yazi.ozet}</Text>
+              </View>
+            )}
+            <Text style={{ fontSize: 15, color: C.textMid, lineHeight: 26 }}>{yazi.icerik}</Text>
+            <View style={{ height: 40 }} />
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
 // ── ADMIN GİRİŞ ──────────────────────────────────────────
 function AdminGiris({ onGiris }) {
   const [sifre, setSifre] = useState('');
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg }]}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 32 }}>
-        <Image source={require('./assets/logo.png')} style={{ width: 180, height: 50, alignSelf: 'center', marginBottom: 8 }} resizeMode="contain" />
+        <Text style={[styles.logoText, { textAlign: 'center', fontSize: 32, color: C.midnight, marginBottom: 4 }]}>etkinlink</Text>
         <Text style={{ color: C.textSoft, textAlign: 'center', marginBottom: 40 }}>Admin Paneli</Text>
         <TextInput style={styles.formInput} placeholder="Şifre" placeholderTextColor={C.textSoft} secureTextEntry value={sifre} onChangeText={setSifre} />
         <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]} onPress={() => { if (sifre === ADMIN_SIFRE) onGiris(); else alert('Hatalı şifre!'); }}>
@@ -1671,13 +2895,13 @@ function DuzenlemeFormu({ mekan, onKaydet, onIptal }) {
         <Text style={styles.formBaslik}>Mekan Düzenle</Text>
         <Text style={{ color: C.gold, fontSize: 13, marginBottom: 20, fontWeight: '600' }}>{mekan.isim}</Text>
         {[
-          { label: 'Mekan Adı *', val: isim, set: setIsim, ph: 'Grand Ballroom' },
+          { label: 'Mekan Adı *', val: isim, set: setIsim, ph: 'İstanbul Convention Center' },
           { label: 'Şehir *', val: sehir, set: setSehir, ph: 'İstanbul' },
           { label: 'Kapasite *', val: kapasite, set: setKapasite, ph: '500', kb: 'numeric' },
-          { label: 'Fiyat Aralığı', val: fiyat, set: setFiyat, ph: '50.000₺ - 150.000₺' },
+          { label: 'Fiyat Aralığı', val: fiyat, set: setFiyat, ph: '100.000₺ - 500.000₺' },
           { label: 'Video URL', val: video, set: setVideo, ph: 'https://youtube.com/...' },
-          { label: 'Fiziksel Özellikler (virgülle)', val: ozellik, set: setOzellik, ph: 'Teras, Bahçe' },
-          { label: 'Teknik Altyapı (virgülle)', val: teknik, set: setTeknik, ph: 'Projeksiyon, Ses' },
+          { label: 'Fiziksel Özellikler (virgülle)', val: ozellik, set: setOzellik, ph: 'Konferans Salonu, Gala Salonu, Hibrit Uyumlu' },
+          { label: 'Teknik Altyapı (virgülle)', val: teknik, set: setTeknik, ph: 'LED Ekran, Simultane Çeviri, Hızlı WiFi' },
         ].map((f, i) => (
           <View key={i}>
             <Text style={styles.inputEtiket}>{f.label}</Text>
@@ -1769,49 +2993,70 @@ function AdminPanel({ onCikis }) {
   const [yeniOzellik, setYeniOzellik] = useState('');
   const [yeniTeknik, setYeniTeknik] = useState('');
   const [yeniAciklama, setYeniAciklama] = useState('');
-  const [yeniAnaKat, setYeniAnaKat] = useState('ozel_gunler');
-  const [yeniAltKat, setYeniAltKat] = useState('dugun');
+  const [yeniAnaKat, setYeniAnaKat] = useState('dis_pazarlama');
+  const [yeniAltKat, setYeniAltKat] = useState('konferans_seminer');
   const [yeniIletisimTuru, setYeniIletisimTuru] = useState('whatsapp');
   const [yeniIletisimNumarasi, setYeniIletisimNumarasi] = useState('');
   const [yeniIletisimEmail, setYeniIletisimEmail] = useState('');
   const [ekleniyor, setEkleniyor] = useState(false);
   const [fotografYukleniyor, setFotografYukleniyor] = useState(false);
 
+  // Blog state
+  const [blogYazilari, setBlogYazilari] = useState([]);
+  const [blogBaslik, setBlogBaslik] = useState('');
+  const [blogOzet, setBlogOzet] = useState('');
+  const [blogIcerik, setBlogIcerik] = useState('');
+  const [blogKapak, setBlogKapak] = useState('');
+  const [blogEtiketler, setBlogEtiketler] = useState('');
+  const [blogEkleniyor, setBlogEkleniyor] = useState(false);
+  const [blogDuzenle, setBlogDuzenle] = useState(null);
+
   useEffect(() => { veriGetir(); }, []);
 
   async function veriGetir() {
     setYukleniyor(true);
-    const [l, m, s, b] = await Promise.all([
+    const [l, m, s, b, blog] = await Promise.all([
       apiFetch('leads?select=*&order=created_at.desc'),
       apiFetch('mekanlar?select=*&onay_durumu=eq.onaylandi&order=created_at.desc'),
       apiFetch('mekan_sahipleri?select=*&order=created_at.desc'),
       apiFetch('mekanlar?select=*&onay_durumu=eq.beklemede&order=created_at.desc'),
+      apiFetch('blog_yazilari?select=*&order=created_at.desc'),
     ]);
     setLeads(Array.isArray(l) ? l : []);
     setMekanlar(Array.isArray(m) ? m : []);
     setSahipler(Array.isArray(s) ? s : []);
     setBekleyenMekanlar(Array.isArray(b) ? b : []);
+    setBlogYazilari(Array.isArray(blog) ? blog : []);
     setYukleniyor(false);
   }
 
-  async function mekanOnayla(id, sahipId) {
-    await apiPatch(`mekanlar?id=eq.${id}`, { onay_durumu: 'onaylandi', aktif: true });
-    veriGetir();
-    alert('✅ Mekan onaylandı!');
+  async function mekanOnayla(id) {
+    try {
+      await apiPatch(`mekanlar?id=eq.${id}`, { onay_durumu: 'onaylandi', aktif: true });
+      await veriGetir();
+      alert('✅ Mekan onaylandı ve yayına alındı!');
+    } catch (e) { alert('Hata: ' + e.message); }
   }
 
   async function mekanReddet(id) {
-    await apiPatch(`mekanlar?id=eq.${id}`, { onay_durumu: 'reddedildi', aktif: false });
-    veriGetir();
+    const onay = Platform.OS === 'web' ? window.confirm('Bu mekan reddedilsin mi?') : true;
+    if (!onay) return;
+    try {
+      await apiPatch(`mekanlar?id=eq.${id}`, { onay_durumu: 'reddedildi', aktif: false });
+      await veriGetir();
+    } catch (e) { alert('Hata: ' + e.message); }
   }
 
   async function mekanEkle() {
     if (!yeniIsim || !yeniSehir || !yeniKapasite) { alert('İsim, şehir ve kapasite zorunlu!'); return; }
+    if ((yeniIletisimTuru === 'whatsapp' || yeniIletisimTuru === 'telefon') && !yeniIletisimNumarasi) {
+      alert('Seçilen iletişim türü için numara zorunlu!'); return;
+    }
     setEkleniyor(true);
-    await apiPost('mekanlar', {
+    const { ok, error } = await apiPostSafe('mekanlar', {
       isim: yeniIsim, sehir: yeniSehir, kapasite: parseInt(yeniKapasite),
       ana_kategori: yeniAnaKat, alt_kategori: [yeniAltKat],
-      fotograf_url: yeniFoto || 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
+      fotograf_url: yeniFoto || 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
       fotograf_galeri: yeniGaleri, video_url: yeniVideo || null,
       fiyat_aralik: yeniFiyat, aciklama: yeniAciklama,
       fiziksel_ozellikler: yeniOzellik ? yeniOzellik.split(',').map(s => s.trim()) : [],
@@ -1819,17 +3064,64 @@ function AdminPanel({ onCikis }) {
       iletisim_turu: yeniIletisimTuru, iletisim_numarasi: yeniIletisimNumarasi, iletisim_email: yeniIletisimEmail,
       aktif: true, onay_durumu: 'onaylandi', puan: 4.5,
     });
+    if (!ok) { alert('Hata: ' + error); setEkleniyor(false); return; }
     setYeniIsim(''); setYeniSehir(''); setYeniKapasite(''); setYeniFoto(''); setYeniGaleri([]);
     setYeniVideo(''); setYeniFiyat(''); setYeniOzellik(''); setYeniTeknik(''); setYeniAciklama('');
     setYeniIletisimNumarasi(''); setYeniIletisimEmail('');
-    setEkleniyor(false); veriGetir(); alert('✅ Mekan eklendi!');
+    setEkleniyor(false);
+    await veriGetir();
+    alert('✅ Mekan başarıyla eklendi!');
   }
 
-  if (yukleniyor) return (
+  async function blogYazisiEkle() {
+    if (!blogBaslik.trim() || !blogIcerik.trim()) { alert('Başlık ve içerik zorunlu!'); return; }
+    setBlogEkleniyor(true);
+    const slug = blogBaslik.trim().toLowerCase()
+      .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const body = {
+      baslik: blogBaslik.trim(),
+      ozet: blogOzet.trim() || blogIcerik.trim().substring(0, 160),
+      icerik: blogIcerik.trim(),
+      kapak_foto: blogKapak.trim() || null,
+      etiketler: blogEtiketler ? blogEtiketler.split(',').map(e => e.trim()).filter(Boolean) : [],
+      slug: slug + '-' + Date.now(),
+      yayinda: true,
+    };
+    if (blogDuzenle) {
+      await apiPatch(`blog_yazilari?id=eq.${blogDuzenle.id}`, body);
+      alert('✅ Blog yazısı güncellendi!');
+      setBlogDuzenle(null);
+    } else {
+      const { ok, error } = await apiPostSafe('blog_yazilari', body);
+      if (!ok) { alert('Hata: ' + error); setBlogEkleniyor(false); return; }
+      alert('✅ Blog yazısı yayınlandı!');
+    }
+    setBlogBaslik(''); setBlogOzet(''); setBlogIcerik(''); setBlogKapak(''); setBlogEtiketler('');
+    setBlogEkleniyor(false);
+    await veriGetir();
+  }
+
+  async function blogYazisiSil(id) {
+    const onay = Platform.OS === 'web' ? window.confirm('Bu blog yazısı silinsin mi?') : true;
+    if (!onay) return;
+    await apiDelete(`blog_yazilari?id=eq.${id}`);
+    await veriGetir();
+  }
+
+  function blogDuzenleBaslat(yazi) {
+    setBlogDuzenle(yazi);
+    setBlogBaslik(yazi.baslik || '');
+    setBlogOzet(yazi.ozet || '');
+    setBlogIcerik(yazi.icerik || '');
+    setBlogKapak(yazi.kapak_foto || '');
+    setBlogEtiketler((yazi.etiketler || []).join(', '));
+    setAktifTab('blog');
+  }
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' }]}>
       <ActivityIndicator size="large" color={C.midnight} />
     </SafeAreaView>
-  );
+  ;
 
   if (aktifTab === 'duzenle' && duzenlenenMekan) {
     return (
@@ -1854,7 +3146,7 @@ function AdminPanel({ onCikis }) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg }]}>
       <View style={styles.adminHeader}>
-        <Image source={require('./assets/logo.png')} style={{ width: 120, height: 34 }} resizeMode="contain" />
+        <Text style={[styles.logoText, { fontSize: 18, color: C.midnight, fontWeight: '800' }]}>etkinlink</Text>
         <TouchableOpacity onPress={onCikis} style={[styles.pill, { backgroundColor: C.bg }]}>
           <Text style={{ color: C.textMid, fontSize: 13 }}>Çıkış</Text>
         </TouchableOpacity>
@@ -1882,6 +3174,7 @@ function AdminPanel({ onCikis }) {
             { id: 'leads', etiket: 'Leads' },
             { id: 'mekanlar', etiket: 'Mekanlar' },
             { id: 'ekle', etiket: '+ Ekle' },
+            { id: 'blog', etiket: '📝 Blog' },
             { id: 'uyeler', etiket: 'Üyeler' },
           ].map(t => (
             <TouchableOpacity key={t.id} style={[styles.tabBtn, { marginRight: 8 }, aktifTab === t.id && { backgroundColor: C.midnight, borderColor: C.midnight }]} onPress={() => setAktifTab(t.id)}>
@@ -1905,7 +3198,7 @@ function AdminPanel({ onCikis }) {
                   {m.aciklama ? <Text style={[styles.adminKartDetay, { marginTop: 4 }]}>{m.aciklama}</Text> : null}
                   <Text style={styles.adminKartTarih}>{formatTarih(m.created_at)}</Text>
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                    <TouchableOpacity style={[styles.teklifBtn, { flex: 1, backgroundColor: C.success, paddingVertical: 12 }]} onPress={() => mekanOnayla(m.id, m.sahip_id)}>
+                    <TouchableOpacity style={[styles.teklifBtn, { flex: 1, backgroundColor: C.success, paddingVertical: 12 }]} onPress={() => mekanOnayla(m.id)}>
                       <Text style={styles.teklifBtnText}>✅ Onayla</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.teklifBtn, { flex: 1, backgroundColor: C.danger, paddingVertical: 12 }]} onPress={() => mekanReddet(m.id)}>
@@ -1943,7 +3236,11 @@ function AdminPanel({ onCikis }) {
                       ))}
                     </View>
                   </View>
-                  <TouchableOpacity onPress={async () => { await apiDelete(`leads?id=eq.${l.id}`); veriGetir(); }} style={{ padding: 8 }}>
+                  <TouchableOpacity onPress={async () => {
+                    const onay = Platform.OS === 'web' ? window.confirm('Bu lead silinsin mi?') : true;
+                    if (!onay) return;
+                    await apiDelete(`leads?id=eq.${l.id}`); veriGetir();
+                  }} style={{ padding: 8 }}>
                     <Text style={{ fontSize: 18 }}>🗑️</Text>
                   </TouchableOpacity>
                 </View>
@@ -1966,7 +3263,11 @@ function AdminPanel({ onCikis }) {
                     <TouchableOpacity style={[styles.durumBtn, { borderColor: C.gold }]} onPress={() => { setDuzenlenenMekan(m); setAktifTab('duzenle'); }}>
                       <Text style={[styles.durumBtnText, { color: C.gold }]}>✏️ Düzenle</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.durumBtn, { borderColor: C.danger }]} onPress={async () => { await apiDelete(`mekanlar?id=eq.${m.id}`); veriGetir(); }}>
+                    <TouchableOpacity style={[styles.durumBtn, { borderColor: C.danger }]} onPress={async () => {
+                      const onay = Platform.OS === 'web' ? window.confirm(`"${m.isim}" mekanı silinsin mi? Bu işlem geri alınamaz.`) : true;
+                      if (!onay) return;
+                      await apiDelete(`mekanlar?id=eq.${m.id}`); veriGetir();
+                    }}>
                       <Text style={[styles.durumBtnText, { color: C.danger }]}>🗑️ Sil</Text>
                     </TouchableOpacity>
                   </View>
@@ -1980,12 +3281,13 @@ function AdminPanel({ onCikis }) {
           <View style={{ padding: 16 }}>
             <Text style={styles.formBaslik}>Yeni Mekan Ekle</Text>
             {[
-              { label: 'Mekan Adı *', val: yeniIsim, set: setYeniIsim, ph: 'Grand Ballroom' },
+              { label: 'Mekan Adı *', val: yeniIsim, set: setYeniIsim, ph: 'İstanbul Convention Center' },
               { label: 'Şehir *', val: yeniSehir, set: setYeniSehir, ph: 'İstanbul' },
               { label: 'Kapasite *', val: yeniKapasite, set: setYeniKapasite, ph: '500', kb: 'numeric' },
               { label: 'Fiyat Aralığı', val: yeniFiyat, set: setYeniFiyat, ph: '50.000₺ - 150.000₺' },
-              { label: 'Fiziksel Özellikler (virgülle)', val: yeniOzellik, set: setYeniOzellik, ph: 'Teras, Bahçe' },
-              { label: 'Teknik Altyapı (virgülle)', val: yeniTeknik, set: setYeniTeknik, ph: 'Projeksiyon, Ses' },
+              { label: 'Video URL (YouTube - opsiyonel)', val: yeniVideo, set: setYeniVideo, ph: 'https://youtube.com/...' },
+              { label: 'Fiziksel Özellikler (virgülle)', val: yeniOzellik, set: setYeniOzellik, ph: 'Konferans Salonu, Gala Salonu, Hibrit Uyumlu' },
+              { label: 'Teknik Altyapı (virgülle)', val: yeniTeknik, set: setYeniTeknik, ph: 'LED Ekran, Simultane Çeviri, Hızlı WiFi' },
             ].map((f, i) => (
               <View key={i}>
                 <Text style={styles.inputEtiket}>{f.label}</Text>
@@ -2048,6 +3350,77 @@ function AdminPanel({ onCikis }) {
           </View>
         )}
 
+        {aktifTab === 'blog' && (
+          <View style={{ padding: 16 }}>
+            <Text style={styles.formBaslik}>{blogDuzenle ? '✏️ Blog Yazısını Düzenle' : '📝 Yeni Blog Yazısı'}</Text>
+            {blogDuzenle && (
+              <TouchableOpacity onPress={() => { setBlogDuzenle(null); setBlogBaslik(''); setBlogOzet(''); setBlogIcerik(''); setBlogKapak(''); setBlogEtiketler(''); }}
+                style={{ marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: C.textSoft, fontSize: 13 }}>← Yeni yazı ekle</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={styles.inputEtiket}>Başlık *</Text>
+            <TextInput style={styles.formInput} placeholder="Kurumsal Etkinliklerde Mekan Seçimi" placeholderTextColor={C.textSoft} value={blogBaslik} onChangeText={setBlogBaslik} />
+
+            <Text style={styles.inputEtiket}>Özet (SEO için)</Text>
+            <TextInput style={[styles.formInput, { height: 64, textAlignVertical: 'top' }]} placeholder="Kısa bir özet..." placeholderTextColor={C.textSoft} value={blogOzet} onChangeText={setBlogOzet} multiline />
+
+            <Text style={styles.inputEtiket}>İçerik *</Text>
+            <TextInput style={[styles.formInput, { height: 200, textAlignVertical: 'top', fontFamily: Platform.OS === 'web' ? 'monospace' : undefined }]}
+              placeholder="Blog yazısının tam metni buraya yazılır..." placeholderTextColor={C.textSoft} value={blogIcerik} onChangeText={setBlogIcerik} multiline />
+
+            <Text style={styles.inputEtiket}>Kapak Fotoğrafı URL (opsiyonel)</Text>
+            <TextInput style={styles.formInput} placeholder="https://..." placeholderTextColor={C.textSoft} value={blogKapak} onChangeText={setBlogKapak} />
+            {blogKapak ? <Image source={{ uri: blogKapak }} style={{ width: '100%', height: 160, borderRadius: 12, marginBottom: 12 }} resizeMode="cover" /> : null}
+
+            <Text style={styles.inputEtiket}>Etiketler (virgülle ayırın)</Text>
+            <TextInput style={styles.formInput} placeholder="mekan seçimi, kurumsal etkinlik, konferans" placeholderTextColor={C.textSoft} value={blogEtiketler} onChangeText={setBlogEtiketler} />
+
+            <TouchableOpacity style={[styles.teklifBtn, { backgroundColor: C.midnight }]} onPress={blogYazisiEkle} disabled={blogEkleniyor}>
+              <Text style={styles.teklifBtnText}>{blogEkleniyor ? 'Yayınlanıyor...' : blogDuzenle ? '💾 Güncelle' : '🚀 Yayınla'}</Text>
+            </TouchableOpacity>
+
+            <View style={{ marginTop: 28 }}>
+              <Text style={[styles.formBaslik, { fontSize: 15, marginBottom: 12 }]}>Mevcut Yazılar ({blogYazilari.length})</Text>
+              {blogYazilari.length === 0 && (
+                <View style={styles.bosEkran}>
+                  <Text style={styles.bosEkranEmoji}>📝</Text>
+                  <Text style={styles.bosEkranText}>Henüz blog yazısı yok.</Text>
+                </View>
+              )}
+              {blogYazilari.map(yazi => (
+                <View key={yazi.id} style={[styles.adminKart, { flexDirection: 'column', padding: 0, overflow: 'hidden' }]}>
+                  {yazi.kapak_foto && <Image source={{ uri: yazi.kapak_foto }} style={{ width: '100%', height: 100, borderRadius: 0 }} resizeMode="cover" />}
+                  <View style={{ padding: 14 }}>
+                    <Text style={styles.adminKartIsim} numberOfLines={2}>{yazi.baslik}</Text>
+                    {yazi.ozet ? <Text style={[styles.adminKartDetay, { marginTop: 4 }]} numberOfLines={2}>{yazi.ozet}</Text> : null}
+                    {(yazi.etiketler || []).length > 0 && (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {yazi.etiketler.map((e, i) => (
+                          <View key={i} style={{ backgroundColor: C.accentSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                            <Text style={{ fontSize: 10, color: C.accent, fontWeight: '600' }}>#{e}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    <Text style={styles.adminKartTarih}>{formatTarih(yazi.created_at)}</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                      <TouchableOpacity style={[styles.durumBtn, { flex: 1, alignItems: 'center', borderColor: C.gold }]} onPress={() => blogDuzenleBaslat(yazi)}>
+                        <Text style={[styles.durumBtnText, { color: C.gold }]}>✏️ Düzenle</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.durumBtn, { flex: 1, alignItems: 'center', borderColor: C.danger }]} onPress={() => blogYazisiSil(yazi.id)}>
+                        <Text style={[styles.durumBtnText, { color: C.danger }]}>🗑️ Sil</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <View style={{ height: 60 }} />
+          </View>
+        )}
+
         {aktifTab === 'uyeler' && (
           <View style={{ padding: 16 }}>
             {sahipler.length === 0
@@ -2087,6 +3460,7 @@ export default function App() {
   const [sahipKullanici, setSahipKullanici] = useState(null);
   const [kullanici, setKullanici] = useState(null);
   const [kullaniciGirisAcik, setKullaniciGirisAcik] = useState(false);
+  const [kullaniciPanelAcik, setKullaniciPanelAcik] = useState(false);
   const [seciliDetay, setSeciliDetay] = useState(null);
   const [mekanlar, setMekanlar] = useState([]);
   const [banner, setBanner] = useState(null);
@@ -2095,6 +3469,7 @@ export default function App() {
   const [anaKategori, setAnaKategori] = useState('hepsi');
   const [altKategori, setAltKategori] = useState(null);
   const [fizikselFiltre, setFizikselFiltre] = useState(null);
+  const [teknikFiltre, setTeknikFiltre] = useState(null);
   const [arama, setArama] = useState('');
   const [seciliMekan, setSeciliMekan] = useState(null);
   const [basariMesaji, setBasariMesaji] = useState(null);
@@ -2102,20 +3477,47 @@ export default function App() {
   // 2. & 5. Gizlilik ve hata state'leri
   const [gizlilikAcik, setGizlilikAcik] = useState(false);
   const [yuklenmeHatasi, setYuklenmeHatasi] = useState(null);
+  // Favoriler ve karşılaştırma — başlangıç boş, useEffect'te kullanıcıya göre yüklenir
+  const [favoriler, setFavoriler] = useState([]);
+  const [karsilastirmaListesi, setKarsilastirmaListesi] = useState([]);
+  const [karsilastirmaAcik, setKarsilastirmaAcik] = useState(false);
+  const [topluTeklifAcik, setTopluTeklifAcik] = useState(false);
+  const [blogYazilari, setBlogYazilari] = useState([]);
+  const [seciliBlogYazi, setSeciliBlogYazi] = useState(null);
 
-  const romantikMod = anaKategori === 'ozel_gunler' && altKategori === 'evlenme_teklifi';
+  const romantikMod = false; // Kurumsal platform — romantik mod kaldırıldı
 
   useEffect(() => {
     veriGetir();
+    // Mekan sahibi session kontrolü
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) setSahipKullanici(session.user);
     });
-    if (Platform.OS === 'web') {
-      try {
-        const k = localStorage.getItem('etkinlink_kullanici');
-        if (k) setKullanici(JSON.parse(k));
-      } catch (e) {}
-    }
+    // Kullanıcı session kontrolü (Supabase Auth)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profil = await apiFetch(`kullanicilar?auth_id=eq.${session.user.id}&select=*`);
+        if (Array.isArray(profil) && profil[0]) {
+          setKullanici(profil[0]);
+          if (Platform.OS === 'web') {
+            try {
+              const f = localStorage.getItem(`etkinlink_favoriler_${profil[0].id}`);
+              if (f) setFavoriler(JSON.parse(f));
+              const karş = localStorage.getItem(`etkinlink_karsilastirma_${profil[0].id}`);
+              if (karş) setKarsilastirmaListesi(JSON.parse(karş));
+            } catch (e) {}
+          }
+        }
+      }
+    });
+    // Auth değişikliklerini dinle
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setKullanici(null);
+        setSahipKullanici(null);
+      }
+    });
+    return () => authListener?.subscription?.unsubscribe?.();
   }, []);
 
   // 5. Hata yakalayan veriGetir
@@ -2125,12 +3527,14 @@ export default function App() {
     try {
       const m = await apiFetch('mekanlar?select=*&aktif=eq.true&onay_durumu=eq.onaylandi&order=one_cikan.desc,puan.desc');
       const b = await apiFetch('sezonsal_bannerlar?select=*&aktif=eq.true&limit=1');
+      const blog = await apiFetch('blog_yazilari?select=*&yayinda=eq.true&order=created_at.desc&limit=6');
       if (!Array.isArray(m)) {
         setYuklenmeHatasi('Mekanlar yüklenemedi. İnternet bağlantınızı kontrol edin.');
       } else {
         setMekanlar(m);
       }
       setBanner(Array.isArray(b) && b.length > 0 ? b[0] : null);
+      setBlogYazilari(Array.isArray(blog) ? blog : []);
     } catch (e) {
       setYuklenmeHatasi('Bağlantı hatası oluştu. Lütfen tekrar deneyin.');
       console.log('Hata:', e.message);
@@ -2142,13 +3546,59 @@ export default function App() {
   function kullaniciGirisYap(k) {
     setKullanici(k);
     setKullaniciGirisAcik(false);
-    if (Platform.OS === 'web') { try { localStorage.setItem('etkinlink_kullanici', JSON.stringify(k)); } catch (e) {} }
+    if (Platform.OS === 'web') {
+      try {
+        const f = localStorage.getItem(`etkinlink_favoriler_${k.id}`);
+        if (f) setFavoriler(JSON.parse(f));
+        const karş = localStorage.getItem(`etkinlink_karsilastirma_${k.id}`);
+        if (karş) setKarsilastirmaListesi(JSON.parse(karş));
+      } catch (e) {}
+    }
+    setKullaniciPanelAcik(true);
   }
 
-  function kullaniciCikis() {
+  async function kullaniciCikis() {
+    const userId = kullanici?.id;
     setKullanici(null);
-    if (Platform.OS === 'web') { try { localStorage.removeItem('etkinlink_kullanici'); } catch (e) {} }
-    setEkran('ana');
+    setKullaniciPanelAcik(false);
+    setFavoriler([]);
+    setKarsilastirmaListesi([]);
+    await supabase.auth.signOut();
+    if (Platform.OS === 'web') {
+      try {
+        if (userId) {
+          localStorage.removeItem(`etkinlink_favoriler_${userId}`);
+          localStorage.removeItem(`etkinlink_karsilastirma_${userId}`);
+        }
+      } catch (e) {}
+    }
+  }
+
+  function favoriToggle(mekanId) {
+    setFavoriler(prev => {
+      const yeni = prev.includes(mekanId) ? prev.filter(id => id !== mekanId) : [...prev, mekanId];
+      if (Platform.OS === 'web') {
+        try {
+          const key = kullanici ? `etkinlink_favoriler_${kullanici.id}` : 'etkinlink_favoriler';
+          localStorage.setItem(key, JSON.stringify(yeni));
+        } catch(e) {}
+      }
+      return yeni;
+    });
+  }
+
+  function karsilastirmaToggle(mekan) {
+    setKarsilastirmaListesi(prev => {
+      const varMi = prev.some(m => m.id === mekan.id);
+      const yeni = varMi ? prev.filter(m => m.id !== mekan.id) : prev.length >= 3 ? [...prev.slice(1), mekan] : [...prev, mekan];
+      if (Platform.OS === 'web') {
+        try {
+          const key = kullanici ? `etkinlink_karsilastirma_${kullanici.id}` : 'etkinlink_karsilastirma';
+          localStorage.setItem(key, JSON.stringify(yeni));
+        } catch(e) {}
+      }
+      return yeni;
+    });
   }
 
   function teklifAc(mekan) {
@@ -2158,8 +3608,11 @@ export default function App() {
   async function leadKaydet({ ad, telefon, kisi, notlar, tarih }) {
     const mekanIsim = seciliMekan.isim;
     const mekanSahipId = seciliMekan.sahip_id;
+    let sahipEmail = null;
+
     try {
-      await apiPost('leads', {
+      // Lead'i kaydet
+      const leadRes = await apiPost('leads', {
         mekan_id: seciliMekan.id,
         mekan_isim: mekanIsim,
         ad_soyad: ad,
@@ -2168,29 +3621,59 @@ export default function App() {
         ana_kategori: anaKategori,
         alt_kategori: altKategori,
         notlar: notlar || null,
-        etkinlik_tarihi: tarih || null,  // 3. etkinlik_tarihi kolonu
+        etkinlik_tarihi: tarih || null,
         iletisim_turu: 'form',
         kullanici_id: kullanici?.id || null,
         sahip_id: mekanSahipId || null,
+        durum: 'bekliyor',
       });
+      if (!leadRes.ok) {
+        const errText = await leadRes.text();
+        console.log('Lead kayıt hatası:', errText);
+      }
 
+      // Mekan sahibi varsa: bakiye düş + email adresini çek
       if (mekanSahipId) {
-        const sahipData = await apiFetch(`mekan_sahipleri?id=eq.${mekanSahipId}&select=bakiye`);
-        if (sahipData?.[0]?.bakiye >= LEAD_UCRETI) {
-          await apiPatch(`mekan_sahipleri?id=eq.${mekanSahipId}`, { bakiye: sahipData[0].bakiye - LEAD_UCRETI });
-          await apiPost('bakiye_hareketleri', { sahip_id: mekanSahipId, miktar: -LEAD_UCRETI, aciklama: `Lead: ${ad}`, tur: 'lead' });
+        const sahipData = await apiFetch(`mekan_sahipleri?id=eq.${mekanSahipId}&select=bakiye,email`);
+        if (Array.isArray(sahipData) && sahipData[0]) {
+          sahipEmail = sahipData[0].email || null;
+          if (sahipData[0].bakiye >= LEAD_UCRETI) {
+            await apiPatch(`mekan_sahipleri?id=eq.${mekanSahipId}`, { bakiye: sahipData[0].bakiye - LEAD_UCRETI });
+            await apiPost('bakiye_hareketleri', {
+              sahip_id: mekanSahipId, miktar: -LEAD_UCRETI,
+              aciklama: `Lead: ${ad} — ${mekanIsim}`, tur: 'lead',
+            });
+          }
         }
       }
 
-      await fetch('https://svaqquywnidqecbcwaqe.supabase.co/functions/v1/lead-bildirim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
-        body: JSON.stringify({ ad_soyad: ad, telefon, mekan_isim: mekanIsim, kisi_sayisi: kisi || null, alt_kategori: altKategori, notlar, etkinlik_tarihi: tarih }),
-      });
-    } catch (e) { console.log('Lead hatası:', e.message); }
+      // Bildirim e-postası gönder (sahip emaili + mekan bilgileri ile)
+      try {
+        await fetch('https://svaqquywnidqecbcwaqe.supabase.co/functions/v1/lead-bildirim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+          body: JSON.stringify({
+            ad_soyad: ad,
+            telefon,
+            mekan_isim: mekanIsim,
+            mekan_id: seciliMekan.id,
+            sahip_id: mekanSahipId || null,
+            sahip_email: sahipEmail,
+            kisi_sayisi: kisi || null,
+            alt_kategori: altKategori,
+            notlar,
+            etkinlik_tarihi: tarih,
+          }),
+        });
+      } catch (mailErr) {
+        console.log('Bildirim e-postası gönderilemedi:', mailErr.message);
+      }
+    } catch (e) {
+      console.log('Lead hatası:', e.message);
+    }
 
     setSeciliMekan(null);
-    setBasariMesaji(`✓ Talebiniz alındı! ${mekanIsim} en kısa sürede sizi arayacak.`);
+    setBasariMesaji(`✓ Teklif talebiniz alındı! ${mekanIsim} ekibi en kısa sürede sizinle iletişime geçecek.`);
     setTimeout(() => setBasariMesaji(null), 5000);
   }
 
@@ -2199,6 +3682,7 @@ export default function App() {
     if (anaKategori === 'populer' && !m.one_cikan) return false;
     if (altKategori && !(m.alt_kategori || []).includes(altKategori)) return false;
     if (fizikselFiltre && !(m.fiziksel_ozellikler || []).includes(fizikselFiltre)) return false;
+    if (teknikFiltre && !(m.teknik_altyapi || []).includes(teknikFiltre)) return false;
     if (arama) {
       const aramaKucuk = arama.toLowerCase();
       const kelimeler = aramaKucuk.split(' ').filter(k => k.length > 1);
@@ -2210,6 +3694,7 @@ export default function App() {
           return t?.etiket?.toLowerCase().includes(kelime);
         }) ||
         (m.fiziksel_ozellikler || []).some(o => o.toLowerCase().includes(kelime)) ||
+        (m.teknik_altyapi || []).some(o => o.toLowerCase().includes(kelime)) ||
         m.aciklama?.toLowerCase().includes(kelime)
       );
       if (!kombineUygun) return false;
@@ -2222,7 +3707,6 @@ export default function App() {
   if (ekran === 'adminPanel') return <AdminPanel onCikis={() => setEkran('ana')} />;
   if (ekran === 'sahipGiris') return <SahipGirisEkrani onGiris={(user) => { setSahipKullanici(user); setEkran('sahipPanel'); }} onKapat={() => setEkran('ana')} />;
   if (ekran === 'sahipPanel' && sahipKullanici) return <SahipPaneli kullanici={sahipKullanici} onCikis={() => { setSahipKullanici(null); setEkran('ana'); }} />;
-  if (ekran === 'kullaniciPanel' && kullanici) return <KullaniciPaneli kullanici={kullanici} onCikis={kullaniciCikis} />;
 
   // 5. Hata sayfası — yalnızca ilk yükleme başarısız olursa göster
   if (yuklenmeHatasi && mekanlar.length === 0 && !yukleniyor) {
@@ -2232,7 +3716,7 @@ export default function App() {
   if (seciliDetay) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar style="light" />
-      <MekanDetay mekan={seciliDetay} onGeri={() => setSeciliDetay(null)} onTeklif={teklifAc} kullanici={kullanici} />
+      <MekanDetay mekan={seciliDetay} onGeri={() => setSeciliDetay(null)} onTeklif={teklifAc} kullanici={kullanici} favoriler={favoriler} onFavoriToggle={favoriToggle} />
       {seciliMekan && (
         <TeklifFormu
           mekan={seciliMekan}
@@ -2250,7 +3734,21 @@ export default function App() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: romantikMod ? C.romanticSoft : C.bg }]}>
       <StatusBar style="dark" />
-      {kullaniciGirisAcik && <KullaniciGirisEkrani onGiris={kullaniciGirisYap} onKapat={() => setKullaniciGirisAcik(false)} />}
+      {kullaniciGirisAcik && <KullaniciGirisEkrani onGiris={kullaniciGirisYap} onKapat={() => setKullaniciGirisAcik(false)} onGizlilikAc={() => setGizlilikAcik(true)} />}
+      {kullaniciPanelAcik && kullanici && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 500, backgroundColor: C.bg }}>
+          <KullaniciPaneli
+            kullanici={kullanici}
+            onKapat={() => setKullaniciPanelAcik(false)}
+            onCikis={kullaniciCikis}
+            onGizlilikAc={() => setGizlilikAcik(true)}
+            favorilerDis={favoriler}
+            karsilastirmaListesiDis={karsilastirmaListesi}
+            onFavoriKaldir={favoriToggle}
+            onKarsilastirmaGuncelle={setKarsilastirmaListesi}
+          />
+        </View>
+      )}
       {basariMesaji && <View style={styles.toast}><Text style={styles.toastText}>{basariMesaji}</Text></View>}
       {seciliMekan && (
         <TeklifFormu
@@ -2263,6 +3761,70 @@ export default function App() {
       )}
       {/* 2. Gizlilik Politikası modal */}
       {gizlilikAcik && <GizlilikPolitikasi onKapat={() => setGizlilikAcik(false)} />}
+
+      {/* Blog yazısı detay modal */}
+      {seciliBlogYazi && (
+        <BlogDetayModal yazi={seciliBlogYazi} onKapat={() => setSeciliBlogYazi(null)} />
+      )}
+
+      {/* Karşılaştırma modalı */}
+      {karsilastirmaAcik && karsilastirmaListesi.length > 0 && (
+        <KarsilastirmaModal
+          mekanlar={karsilastirmaListesi}
+          onKapat={() => setKarsilastirmaAcik(false)}
+          onTeklif={(m) => { setKarsilastirmaAcik(false); teklifAc(m); }}
+          onTopluTeklif={() => { setKarsilastirmaAcik(false); setTopluTeklifAcik(true); }}
+          kullanici={kullanici}
+        />
+      )}
+
+      {/* Toplu teklif formu */}
+      {topluTeklifAcik && karsilastirmaListesi.length > 0 && (
+        <TopluTeklifFormu
+          mekanlar={karsilastirmaListesi}
+          onKapat={() => setTopluTeklifAcik(false)}
+          onGonder={async ({ ad, telefon, kisi, tarih, notlar, mekanlar: mkList }) => {
+            for (const m of mkList) {
+              try {
+                await apiPost('leads', {
+                  mekan_id: m.id, mekan_isim: m.isim,
+                  ad_soyad: ad, telefon,
+                  kisi_sayisi: kisi ? parseInt(kisi) : null,
+                  notlar: notlar || null,
+                  etkinlik_tarihi: tarih || null,
+                  iletisim_turu: 'form',
+                  kullanici_id: kullanici?.id || null,
+                  sahip_id: m.sahip_id || null,
+                });
+              } catch(e) { console.log('Toplu lead hatası:', e.message); }
+            }
+            setTopluTeklifAcik(false);
+            setBasariMesaji(`✓ ${mkList.length} mekana teklif talebiniz iletildi!`);
+            setTimeout(() => setBasariMesaji(null), 5000);
+          }}
+          kullanici={kullanici}
+          onGizlilikAc={() => setGizlilikAcik(true)}
+        />
+      )}
+
+      {/* Karşılaştırma floating butonu */}
+      {karsilastirmaListesi.length > 0 && !karsilastirmaAcik && !topluTeklifAcik && !kullaniciPanelAcik && !seciliDetay && (
+        <TouchableOpacity
+          onPress={() => setKarsilastirmaAcik(true)}
+          style={{
+            position: 'absolute', bottom: 24, right: 20, zIndex: 100,
+            backgroundColor: C.midnight, borderRadius: 28,
+            paddingHorizontal: 18, paddingVertical: 12,
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25, shadowRadius: 12, elevation: 8,
+          }}>
+          <Text style={{ fontSize: 16 }}>⚖️</Text>
+          <Text style={{ color: C.white, fontWeight: '700', fontSize: 13 }}>
+            Karşılaştır ({karsilastirmaListesi.length})
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -2277,18 +3839,16 @@ export default function App() {
               setLogoTiklama(yeni);
               if (yeni >= ADMIN_TIKLAMA_SAYISI) { setLogoTiklama(0); setEkran('adminGiris'); }
             }}>
-            <Image source={require('./assets/logo.png')}
-              style={{ width: IS_DESKTOP ? 48 : 38, height: IS_DESKTOP ? 48 : 38 }}
-              resizeMode="contain" />
+            <EtkinlinkLogo size={IS_DESKTOP ? 44 : 34} />
             <View>
               <Text style={[styles.logoText, IS_DESKTOP && styles.logoTextDesktop]}>etkinlink</Text>
-              <Text style={styles.slogan}>Etkinliğin için en uygun mekanı bul</Text>
+              <Text style={styles.slogan}>Kurumsal etkinlikleriniz için doğru mekan</Text>
             </View>
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <TouchableOpacity
               style={[styles.pill, { backgroundColor: kullanici ? C.successSoft : C.white, borderColor: kullanici ? C.success : C.border }]}
-              onPress={() => kullanici ? setEkran('kullaniciPanel') : setKullaniciGirisAcik(true)}>
+              onPress={() => kullanici ? setKullaniciPanelAcik(true) : setKullaniciGirisAcik(true)}>
               <Text style={{ fontSize: 13, color: kullanici ? C.success : C.textMid, fontWeight: '600' }}>
                 {kullanici ? `👤 ${kullanici.ad_soyad.split(' ')[0]}` : '👤 Giriş'}
               </Text>
@@ -2297,19 +3857,38 @@ export default function App() {
               style={[styles.pill, { backgroundColor: sahipKullanici ? C.goldSoft : C.white, borderColor: C.gold }]}
               onPress={() => sahipKullanici ? setEkran('sahipPanel') : setEkran('sahipGiris')}>
               <Text style={{ fontSize: 13, color: C.gold, fontWeight: '600' }}>
-                {sahipKullanici ? '🏢 Panelim' : '🏢 Mekan Sahibi'}
+                {sahipKullanici ? '🏢 Panelim' : '🏢 Mekan Ekle'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* BANNER */}
+        {/* KURUMSAL HERO BANNER */}
+        {!banner && (
+          <View style={{ marginHorizontal: 16, marginBottom: 4, backgroundColor: C.midnight, borderRadius: 20, padding: 20,
+            flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: C.gold, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
+                KURUMSAL ETKİNLİK PLATFORMU
+              </Text>
+              <Text style={{ color: C.white, fontSize: 17, fontWeight: '800', lineHeight: 24, marginBottom: 8 }}>
+                Etkinliğinize en{' '}uygun mekanı bulun
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, lineHeight: 18 }}>
+                Lansman · Konferans · Team Building{' '}Genel Kurul · Ödül Töreni
+              </Text>
+            </View>
+            <Text style={{ fontSize: 48, marginLeft: 12 }}>🏛</Text>
+          </View>
+        )}
+
+        {/* SEZON BANNER */}
         <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
           <SezonBanner banner={banner} />
         </View>
 
         {/* ARAMA */}
-        <AramaComubugu arama={arama} setArama={setArama} />
+        <AramaCubugu arama={arama} setArama={setArama} />
 
         {/* KATEGORİLER */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsContainer} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
@@ -2337,12 +3916,20 @@ export default function App() {
               <Text style={[styles.filtrePillText, fizikselFiltre === f.id && { color: C.gold, fontWeight: '700' }]}>{f.etiket}</Text>
             </TouchableOpacity>
           ))}
+          {TEKNIK_FILTRELER.map(f => (
+            <TouchableOpacity key={f.id}
+              style={[styles.filtrePill, teknikFiltre === f.id && { backgroundColor: C.midnight + '15', borderColor: C.midnight }]}
+              onPress={() => setTeknikFiltre(teknikFiltre === f.id ? null : f.id)}>
+              <Text style={styles.pillEmoji}>{f.emoji}</Text>
+              <Text style={[styles.filtrePillText, teknikFiltre === f.id && { color: C.midnight, fontWeight: '700' }]}>{f.etiket}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 16, marginBottom: 8 }}>
-          <Text style={styles.sonucSayisi}>{filtrelenmis.length} mekan{arama ? ` "${arama}" için` : ''}</Text>
-          {(arama || altKategori || fizikselFiltre) && (
-            <TouchableOpacity onPress={() => { setArama(''); setAltKategori(null); setFizikselFiltre(null); }}>
+          <Text style={styles.sonucSayisi}>{filtrelenmis.length} kurumsal mekan{arama ? ` "${arama}" için` : ''}</Text>
+          {(arama || altKategori || fizikselFiltre || teknikFiltre) && (
+            <TouchableOpacity onPress={() => { setArama(''); setAltKategori(null); setFizikselFiltre(null); setTeknikFiltre(null); }}>
               <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>Filtreleri Temizle ✕</Text>
             </TouchableOpacity>
           )}
@@ -2365,7 +3952,11 @@ export default function App() {
         ) : (
           <View style={[styles.kartGrid, IS_DESKTOP && styles.kartGridDesktop]}>
             {filtrelenmis.map((mekan, index) => (
-              <MekanKarti key={mekan.id} mekan={mekan} onTeklif={teklifAc} onDetay={setSeciliDetay} romantikMod={romantikMod} index={index} kullanici={kullanici} />
+              <MekanKarti key={mekan.id} mekan={mekan} onTeklif={teklifAc} onDetay={setSeciliDetay}
+                romantikMod={romantikMod} index={index} kullanici={kullanici}
+                favoriler={favoriler} onFavoriToggle={favoriToggle}
+                karsilastirmaListesi={karsilastirmaListesi} onKarsilastirmaToggle={karsilastirmaToggle}
+              />
             ))}
             {filtrelenmis.length === 0 && (
               <View style={styles.bosEkran}>
@@ -2378,6 +3969,58 @@ export default function App() {
                 )}
               </View>
             )}
+          </View>
+        )}
+
+        {/* BLOG KÖŞESİ */}
+        {blogYazilari.length > 0 && (
+          <View style={{ marginTop: 24, marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 14 }}>
+              <View>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: C.text, letterSpacing: -0.4 }}>📖 Blog & Rehber</Text>
+                <Text style={{ fontSize: 12, color: C.textSoft, marginTop: 2 }}>Kurumsal etkinlik ipuçları</Text>
+              </View>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 14 }}>
+              {blogYazilari.map((yazi, i) => (
+                <TouchableOpacity
+                  key={yazi.id}
+                  onPress={() => setSeciliBlogYazi(yazi)}
+                  activeOpacity={0.88}
+                  style={{
+                    width: IS_DESKTOP ? 320 : SCREEN_WIDTH * 0.76,
+                    backgroundColor: C.white, borderRadius: 16,
+                    overflow: 'hidden', borderWidth: 1, borderColor: C.border,
+                    shadowColor: '#1A1F36', shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.06, shadowRadius: 10,
+                  }}>
+                  {yazi.kapak_foto ? (
+                    <Image source={{ uri: yazi.kapak_foto }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
+                  ) : (
+                    <View style={{ width: '100%', height: 100, backgroundColor: C.midnight, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 36 }}>📝</Text>
+                    </View>
+                  )}
+                  <View style={{ padding: 14 }}>
+                    {(yazi.etiketler || []).length > 0 && (
+                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                        {yazi.etiketler.slice(0, 2).map((e, ei) => (
+                          <View key={ei} style={{ backgroundColor: C.accentSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                            <Text style={{ fontSize: 10, color: C.accent, fontWeight: '700' }}>#{e}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, lineHeight: 20, marginBottom: 6 }} numberOfLines={2}>{yazi.baslik}</Text>
+                    {yazi.ozet ? <Text style={{ fontSize: 12, color: C.textMid, lineHeight: 18 }} numberOfLines={2}>{yazi.ozet}</Text> : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                      <Text style={{ fontSize: 11, color: C.textSoft }}>{new Date(yazi.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+                      <Text style={{ fontSize: 12, color: C.accent, fontWeight: '600' }}>Oku →</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
 
@@ -2400,13 +4043,13 @@ const styles = StyleSheet.create({
   container:           { flex: 1 },
   toast:               { position: 'absolute', top: 60, left: 20, right: 20, zIndex: 999, backgroundColor: C.successSoft, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.success + '40' },
   toastText:           { color: C.success, fontWeight: '600', textAlign: 'center', fontSize: 14 },
-  header:              { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 },
+  header:              { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.border },
   logo:                { fontSize: 26, fontWeight: '800', color: C.midnight, letterSpacing: -1 },
   logoText:            { fontSize: IS_DESKTOP ? 21 : 17, fontWeight: '700', color: C.midnight, letterSpacing: -0.6 },
   logoTextDesktop:     { fontSize: 23, letterSpacing: -0.8 },
   logoEtkin:           { color: C.midnight, fontWeight: '500' },
   logoLink:            { color: C.gold, fontWeight: '800' },
-  slogan:              { fontSize: 11, color: C.midnight, marginTop: 2, letterSpacing: 1.2, textTransform: 'uppercase', fontWeight: '500', opacity: 0.45 },
+  slogan:              { fontSize: 10, color: C.midnight, marginTop: 2, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: '600', opacity: 0.5 },
   banner:              { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16, borderWidth: 1, gap: 12, marginBottom: 4 },
   bannerEmoji:         { fontSize: 24 },
   bannerBaslik:        { fontSize: 15, fontWeight: '700' },
@@ -2427,7 +4070,7 @@ const styles = StyleSheet.create({
   sonucSayisi:         { color: C.textSoft, fontSize: 12 },
   kartGrid:            { paddingHorizontal: 16, gap: 20 },
   kartGridDesktop:     { flexDirection: 'row', flexWrap: 'wrap', gap: 24, paddingHorizontal: 24 },
-  kart:                { backgroundColor: C.white, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16 },
+  kart:                { backgroundColor: C.white, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: C.border, shadowColor: '#1A1F36', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 14 },
   kartDesktop:         { width: IS_DESKTOP ? '47%' : '100%' },
   kartGorsel:          { width: '100%', height: 220 },
   puanBadge:           { position: 'absolute', top: 14, right: 14, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
