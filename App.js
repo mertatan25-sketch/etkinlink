@@ -3841,7 +3841,7 @@ export default function App() {
               setLogoTiklama(yeni);
               if (yeni >= ADMIN_TIKLAMA_SAYISI) { setLogoTiklama(0); setEkran('adminGiris'); }
             }}>
-            <EtkinlinkLogo size={IS_DESKTOP ? 44 : 34} />
+            <EtkinlinkLogo size={IS_DESKTOP ? 56 : 44} />
             <View>
               <Text style={[styles.logoText, IS_DESKTOP && styles.logoTextDesktop]}>etkinlink</Text>
               <Text style={styles.slogan}>Kurumsal etkinlikleriniz için doğru mekan</Text>
