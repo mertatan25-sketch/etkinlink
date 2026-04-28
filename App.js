@@ -240,7 +240,7 @@ function seoGuncelle({ title, description, image } = {}) {
 }
 
 // ── LOGO BİLEŞENİ (Gerçek logo görseli) ─────────────────
-const ETKINLINK_LOGO = require('./assets/logo_etkinlink2.png');
+const ETKINLINK_LOGO = require('./assets/logo.png');
 
 function EtkinlinkLogo({ size = 36 }) {
   const s = size;
