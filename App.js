@@ -239,35 +239,37 @@ function seoGuncelle({ title, description, image } = {}) {
   setMeta('meta[name="twitter:image"]', img);
 }
 
-// ── LOGO BİLEŞENİ (Link/Zincir simgesi) ─────────────────
+// ── LOGO BİLEŞENİ (Gerçek logo görseli) ─────────────────
+const ETKINLINK_LOGO = require('./assets/logo_etkinlink2.png');
+
 function EtkinlinkLogo({ size = 36 }) {
   const s = size;
-  const pad = Math.round(s * 0.18);
-  const r = Math.round(s * 0.22);
-  const strokeW = Math.max(2, Math.round(s * 0.08));
   if (Platform.OS === 'web') {
     return (
-      <div style={{
-        width: s, height: s,
-        background: C.midnight,
-        borderRadius: Math.round(s * 0.26),
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        <svg width={s * 0.62} height={s * 0.62} viewBox="0 0 24 24" fill="none"
-          stroke={C.gold} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-        </svg>
-      </div>
+      <img
+        src={ETKINLINK_LOGO}
+        alt="etkinlink logo"
+        style={{
+          width: s,
+          height: s,
+          borderRadius: Math.round(s * 0.26),
+          objectFit: 'contain',
+          flexShrink: 0,
+          display: 'block',
+        }}
+      />
     );
   }
-  // Native fallback — Text tabanlı
   return (
-    <View style={{ width: s, height: s, backgroundColor: C.midnight, borderRadius: Math.round(s * 0.26),
-      justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ color: C.gold, fontSize: Math.round(s * 0.45), fontWeight: '900' }}>🔗</Text>
-    </View>
+    <Image
+      source={ETKINLINK_LOGO}
+      style={{
+        width: s,
+        height: s,
+        borderRadius: Math.round(s * 0.26),
+      }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -345,7 +347,7 @@ function GizlilikPolitikasi({ onKapat }) {
             },
             {
               baslik: '7. İletişim',
-              icerik: 'KVKK kapsamındaki haklarınızı kullanmak veya sorularınız için bizimle iletişime geçebilirsiniz:\n\nE-posta: kvkk@etkinlink.com\nAdres: İstanbul, Türkiye',
+              icerik: 'KVKK kapsamındaki haklarınızı kullanmak veya sorularınız için bizimle iletişime geçebilirsiniz:\n\nE-posta: mert.atan@etkinlink.tech\nAdres: İstanbul, Türkiye',
             },
             {
               baslik: '8. Çerezler',
@@ -397,7 +399,7 @@ function HataSayfasi({ hata, onYeniden }) {
         </TouchableOpacity>
         <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 20, textAlign: 'center', lineHeight: 18 }}>
           Sorun devam ederse{'\n'}
-          <Text style={{ color: C.gold }}>destek@etkinlink.com</Text> adresine yazın.
+          <Text style={{ color: C.gold }}>mert.atan@etkinlink.tech</Text> adresine yazın.
         </Text>
       </Animated.View>
     </SafeAreaView>
@@ -663,7 +665,7 @@ function KullaniciGirisEkrani({ onGiris, onKapat, onGizlilikAc }) {
     if (!email.trim()) { setHata('E-posta adresinizi girin.'); return; }
     setYukleniyor(true); setHata('');
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: Platform.OS === 'web' ? window.location.origin : 'https://etkinlink.com',
+      redirectTo: Platform.OS === 'web' ? window.location.origin : 'https://etkinlink.tech',
     });
     setYukleniyor(false);
     if (error) { setHata('Hata: ' + error.message); return; }
@@ -1190,7 +1192,7 @@ function SahipGirisEkrani({ onGiris, onKapat }) {
     if (!sifreSifirlamaEmail) { setHata('E-posta adresinizi girin.'); return; }
     setYukleniyor(true); setHata('');
     const { error } = await supabase.auth.resetPasswordForEmail(sifreSifirlamaEmail, {
-      redirectTo: 'https://etkinlink.com/sifre-sifirla',
+      redirectTo: 'https://etkinlink.tech/sifre-sifirla',
     });
     setYukleniyor(false);
     if (error) { setHata('Hata: ' + error.message); return; }
